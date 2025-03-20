@@ -1,2 +1,2 @@
 # KawaiiKombatant
-KawaiiKombatant code
+KawaiiKombatant code(time to revive)
