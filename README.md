@@ -4,6 +4,7 @@ KawaiiKombatant code(time to revive)
 plan on what to use to add
 
 LLM-based dialogue using Ollama, or OpenRouter
+
 🧠 Conversation memory to keep context during interactions
 
 🔊 Voice generation via GPT-SoVITS API(prob use a amd fork or swtich to a diffrent one)
@@ -13,4 +14,6 @@ LLM-based dialogue using Ollama, or OpenRouter
 📁 Clean YAML-based config for personality configuration 
 
 
+thoughts to add in the future if the project is worked out
 
+image,screen,ocr reader
