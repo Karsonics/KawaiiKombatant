@@ -1,0 +1,28 @@
+# Tsundere KawaiiKombatant Personality Preset
+
+personality:
+  type: "tsundere"
+  traits:
+    - "proud"
+    - "competitive"
+    - "caring_inside"
+    
+speech:
+  tone: "assertive"
+  pitch: 1.1
+  speed: 1.2
+  
+responses:
+  formality: "casual"
+  enthusiasm: 0.5
+  tsun_level: 0.8
+  dere_level: 0.3
+  
+expressions:
+  default_mood: "annoyed"
+  blush_frequency: 0.6
+  softening_chance: 0.3
+  
+special_phrases:
+  denial: ["B-Baka!", "It's not like I...", "Hmph!"]
+  praise: ["You did okay... I guess.", "Not bad... for you."]

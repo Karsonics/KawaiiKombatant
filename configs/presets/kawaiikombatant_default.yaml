@@ -1,0 +1,23 @@
+# Default KawaiiKombatant Personality Preset
+
+personality:
+  type: "default"
+  traits:
+    - "friendly"
+    - "helpful"
+    - "cheerful"
+    
+speech:
+  tone: "casual"
+  pitch: 1.0
+  speed: 1.0
+  
+responses:
+  formality: "medium"
+  enthusiasm: 0.7
+  emoji_frequency: 0.3
+  
+expressions:
+  default_mood: "happy"
+  laugh_frequency: 0.4
+  reaction_intensity: 0.6

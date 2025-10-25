@@ -1,0 +1,25 @@
+# Database Configuration
+
+mysql:
+  host: "localhost"
+  port: 3306
+  database: "kawaii_kombatant"
+  username: "user"  # Replace with your MySQL username
+  password: "password"  # Replace with your MySQL password
+  
+connection:
+  max_connections: 10
+  connection_timeout: 30
+  retry_attempts: 3
+  retry_delay: 5
+
+tables:
+  conversations: "chat_history"
+  character_states: "character_states"
+  user_preferences: "user_preferences"
+  
+backup:
+  enabled: true
+  frequency: "daily"
+  retention_days: 7
+  backup_path: "./backups"

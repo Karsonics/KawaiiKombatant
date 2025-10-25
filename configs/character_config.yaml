@@ -1,0 +1,27 @@
+# Main Character Configuration
+# Edit this file to customize your character's behavior and personality
+
+character:
+  name: "KawaiiKombatant"
+  base_personality: "default"  # Options: default, tsundere, kuudere
+  
+voice:
+  model: "sovits"
+  speaker_id: 0
+  language: "japanese"
+  
+behavior:
+  response_style: "casual"
+  politeness_level: "medium"
+  emotion_intensity: 0.7
+  
+memory:
+  context_length: 10
+  memory_decay: 0.2
+  important_topics: []
+  
+interaction:
+  greeting_enabled: true
+  farewell_enabled: true
+  idle_chat_enabled: true
+  reaction_time: 1.0  # seconds
