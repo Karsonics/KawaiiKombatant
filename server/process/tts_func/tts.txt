@@ -1,0 +1,1 @@
+Text-to-speech + GPT-SoVITS AMD integration

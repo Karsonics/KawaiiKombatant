@@ -1,0 +1,32 @@
+# SoVITS Advanced Configuration
+
+model:
+  checkpoint_path: "./models/sovits_model.pth"
+  device: "cuda"  # or "cpu"
+  
+audio:
+  sampling_rate: 44100
+  hop_length: 256
+  win_length: 1024
+  n_fft: 2048
+  
+inference:
+  batch_size: 1
+  speed: 1.0
+  pitch_adjust: 0
+  energy_adjust: 1.0
+  
+optimization:
+  half_precision: true
+  num_threads: 4
+  cache_size: 100
+  
+preprocessing:
+  silence_threshold: -40
+  min_silence_length: 0.3
+  normalize_volume: true
+  
+postprocessing:
+  denoise: true
+  reverb: false
+  reverb_room_size: 0.1
