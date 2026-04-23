@@ -1,0 +1,492 @@
+{
+  "timestamp": "20260408_222854",
+  "args": {
+    "ref_audio": "/home/weeb_user/Documents/kawaii/KawaiiKombatant/assets/voices/megumi_clean.wav",
+    "ref_text": "For the cost of a meal and basic necessities, you can have the power of an archwizard.",
+    "ref_lang": "en",
+    "text_lang": "en",
+    "host": "127.0.0.1",
+    "port": 9880,
+    "runs": 3,
+    "output": "./benchmark_results",
+    "batch_sizes": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "concurrency": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "skip_warmup": false,
+    "skip_batch": false,
+    "skip_concurrency": false,
+    "skip_stress": false,
+    "compare": null,
+    "text_split_methods": [
+      "cut5",
+      "cut6",
+      "cut4"
+    ],
+    "languages": [
+      "en",
+      "zh",
+      "ja"
+    ],
+    "export_json": true,
+    "export_csv": true,
+    "save_audio": false,
+    "quiet": false
+  },
+  "summary": {
+    "total_tests": 24,
+    "total_requests": 188,
+    "failed_requests": 3,
+    "success_rate": 0.9840425531914894
+  },
+  "category_results": [
+    {
+      "label": "short_0",
+      "category": "short",
+      "text": "Hello!",
+      "chars": 6,
+      "words": 1,
+      "audio_duration": 1.18,
+      "times": [
+        3.9162085319985636,
+        2.4054250860062893,
+        3.6881816370005254
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "short_1",
+      "category": "short",
+      "text": "How are you?",
+      "chars": 12,
+      "words": 3,
+      "audio_duration": 0.74,
+      "times": [
+        0.5271586399976513,
+        0.5283188309986144,
+        0.5445986319973599
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "short_2",
+      "category": "short",
+      "text": "Nice to meet you.",
+      "chars": 17,
+      "words": 4,
+      "audio_duration": 0.74,
+      "times": [
+        0.6003869869964547,
+        0.5414145499962615,
+        0.5193328429959365
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "short_3",
+      "category": "short",
+      "text": "Good morning!",
+      "chars": 13,
+      "words": 2,
+      "audio_duration": 0.74,
+      "times": [
+        0.5304415199934738,
+        0.5269317630009027,
+        0.533377374005795
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "short_4",
+      "category": "short",
+      "text": "Thank you.",
+      "chars": 10,
+      "words": 2,
+      "audio_duration": 1.14,
+      "times": [
+        1.843347031994199,
+        0.5732546940052998,
+        0.753388659999473
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "medium_0",
+      "category": "medium",
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "chars": 44,
+      "words": 9,
+      "audio_duration": 0.74,
+      "times": [
+        0.5228193669972825,
+        0.5225857860059477,
+        0.5314479309963644
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "medium_1",
+      "category": "medium",
+      "text": "Artificial intelligence is transforming our world.",
+      "chars": 50,
+      "words": 6,
+      "audio_duration": 1.42,
+      "times": [
+        4.398339207997196,
+        1.5672386120058945,
+        0.5469242460021633
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "medium_2",
+      "category": "medium",
+      "text": "Welcome to the future of voice synthesis.",
+      "chars": 41,
+      "words": 7,
+      "audio_duration": 0.74,
+      "times": [
+        0.5299238139996305,
+        0.5234918280038983,
+        0.825055720997625
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "medium_3",
+      "category": "medium",
+      "text": "Machine learning enables incredible capabilities.",
+      "chars": 49,
+      "words": 5,
+      "audio_duration": 1.18,
+      "times": [
+        0.8059565160001512,
+        0.5732008339982713,
+        0.5642879840015667
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "medium_4",
+      "category": "medium",
+      "text": "Speech synthesis has come a long way.",
+      "chars": 37,
+      "words": 7,
+      "audio_duration": 0.74,
+      "times": [
+        0.5451291069985018,
+        2.6029012859944487,
+        0.55021038200357
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "long_0",
+      "category": "long",
+      "text": "Artificial intelligence has transformed many industries over the past decade, enabling machines to perform tasks that previously required human intelligence, from recognizing speech and images to translating languages and driving cars.",
+      "chars": 235,
+      "words": 31,
+      "audio_duration": 4.78,
+      "times": [
+        8.14815652800462,
+        10.557178609997209,
+        3.371577365003759
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "long_1",
+      "category": "long",
+      "text": "The history of computing spans thousands of years, from the abacus in ancient times to modern quantum computers, each generation building upon the innovations of those who came before.",
+      "chars": 184,
+      "words": 29,
+      "audio_duration": 3.42,
+      "times": [
+        3.1129304630012484,
+        5.091935112999636,
+        1.1965350859973114
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "long_2",
+      "category": "long",
+      "text": "Climate change represents one of the greatest challenges facing humanity in the 21st century, requiring coordinated global action to mitigate its effects and adapt to its consequences.",
+      "chars": 184,
+      "words": 27,
+      "audio_duration": 4.92,
+      "times": [
+        9.873992501998146,
+        11.552974045000155,
+        10.117365845995664
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "very_long_0",
+      "category": "very_long",
+      "text": "In the realm of artificial intelligence and machine learning, researchers have made remarkable strides in developing systems capable of understanding, processing, and generating human language. These advances have applications ranging from virtual assistants and chatbots to automated translation services and content generation. The ability of machines to not only comprehend but also produce natural-sounding speech represents a particularly fascinating frontier in AI development, one that combines expertise from acoustics, linguistics, and deep learning.",
+      "chars": 559,
+      "words": 73,
+      "audio_duration": 22.26,
+      "times": [
+        43.813336462000734,
+        43.04119303000334,
+        46.2015032729978
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "very_long_1",
+      "category": "very_long",
+      "text": "Throughout history, human beings have sought to preserve and transmit knowledge across generations and cultures. From the earliest cave paintings and oral traditions to the invention of writing, the printing press, and now digital technologies, each new medium for recording and sharing information has fundamentally transformed society. Today, we stand at another pivotal moment in this ongoing story, where the boundaries between human and machine creativity are becoming increasingly blurred.",
+      "chars": 495,
+      "words": 70,
+      "audio_duration": 14.38,
+      "times": [
+        20.751721956999972,
+        16.67272633399989,
+        21.648194802000944
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "stress_0",
+      "category": "stress",
+      "text": "Supercalifragilisticexpialidocious!",
+      "chars": 35,
+      "words": 1,
+      "audio_duration": 0.74,
+      "times": [
+        0.5344283230006113,
+        0.9298716269986471,
+        0.5359360489965184
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "stress_1",
+      "category": "stress",
+      "text": "The five boxing wizards jump quickly. A quick movement of the enemy will jeopardize six gunboats. All questions asked by five expert boxing wizards are answered!",
+      "chars": 161,
+      "words": 26,
+      "audio_duration": 3.46,
+      "times": [
+        1.6282716889982112,
+        1.4603265690020635,
+        1.7498849179974059
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "stress_2",
+      "category": "stress",
+      "text": "Unique New York Unique New York Unique New York You know you need unique New York Unique New York Unique New York",
+      "chars": 113,
+      "words": 22,
+      "audio_duration": 4.46,
+      "times": [
+        12.348089421997429,
+        5.812727780001296,
+        1.8962825170019642
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "punctuation_0",
+      "category": "punctuation",
+      "text": "Hello, world! How's it going? I'm doing great... really, I am!",
+      "chars": 62,
+      "words": 11,
+      "audio_duration": 4.6,
+      "times": [
+        1.8655782179994276,
+        3.6220955280005,
+        2.860166414997366
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "punctuation_1",
+      "category": "punctuation",
+      "text": "Wait... did you hear that? Yes, yes, I did! Absolutely incredible!",
+      "chars": 66,
+      "words": 11,
+      "audio_duration": 6.28,
+      "times": [
+        2.644941431004554,
+        2.2525617290011724,
+        2.181962743998156
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "punctuation_2",
+      "category": "punctuation",
+      "text": "Call me at 1-800-555-0199. Or email: test@example.com. Maybe both?",
+      "chars": 66,
+      "words": 9,
+      "audio_duration": 2.3,
+      "times": [
+        1.1768741499981843,
+        1.7267116980001447,
+        1.576968253000814
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "numbers_0",
+      "category": "numbers",
+      "text": "The population of Earth is approximately 8 billion people as of 2024.",
+      "chars": 69,
+      "words": 12,
+      "audio_duration": 2.66,
+      "times": [
+        7.690990929004329,
+        0.7516154420009116,
+        8.468583879002836
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "numbers_1",
+      "category": "numbers",
+      "text": "Pi is approximately 3.14159. The square root of 2 is about 1.41421.",
+      "chars": 67,
+      "words": 12,
+      "audio_duration": 1.48,
+      "times": [
+        0.8214770150007098,
+        0.834593109000707,
+        0.8431213069998194
+      ],
+      "failures": 0,
+      "error_messages": []
+    },
+    {
+      "label": "numbers_2",
+      "category": "numbers",
+      "text": "In 1984, Apple released the Macintosh. In 2007, they introduced the iPhone.",
+      "chars": 75,
+      "words": 12,
+      "audio_duration": 2.96,
+      "times": [
+        1.3584030479978537,
+        1.5094402100003208,
+        1.6398067089976394
+      ],
+      "failures": 0,
+      "error_messages": []
+    }
+  ],
+  "batch_results": [
+    {
+      "batch_size": 1,
+      "total_time": 0.7428635743344785,
+      "individual_times": [
+        0.7824031109994394,
+        0.8125718730007065,
+        0.6336157390032895
+      ],
+      "avg_per_item": 0.7428635743344785,
+      "failures": 0
+    },
+    {
+      "batch_size": 2,
+      "total_time": 0.7287676520039289,
+      "individual_times": [
+        0.7154205220067524,
+        0.7980595609988086,
+        0.6728228730062256
+      ],
+      "avg_per_item": 0.36438382600196445,
+      "failures": 0
+    },
+    {
+      "batch_size": 4,
+      "total_time": 2.006946968668975,
+      "individual_times": [
+        1.0392492710016086,
+        1.1364508050028235,
+        3.8451408300024923
+      ],
+      "avg_per_item": 0.5017367421672437,
+      "failures": 0
+    },
+    {
+      "batch_size": 8,
+      "total_time": 10.654856208665782,
+      "individual_times": [
+        14.001146533002611,
+        12.124499457997445,
+        5.838922634997289
+      ],
+      "avg_per_item": 1.3318570260832228,
+      "failures": 0
+    }
+  ],
+  "concurrency_results": [
+    {
+      "num_workers": 1,
+      "total_time": 0.5271905900008278,
+      "successful": 1,
+      "failed": 0,
+      "avg_latency": 0.5269035159944906,
+      "throughput": 1.8968472104147949
+    },
+    {
+      "num_workers": 2,
+      "total_time": 1.1092044569959398,
+      "successful": 2,
+      "failed": 0,
+      "avg_latency": 0.817387888997473,
+      "throughput": 1.8030940890885014
+    },
+    {
+      "num_workers": 4,
+      "total_time": 2.498090660003072,
+      "successful": 4,
+      "failed": 0,
+      "avg_latency": 1.7096493510016444,
+      "throughput": 1.6012229115796306
+    },
+    {
+      "num_workers": 8,
+      "total_time": 4.9908651579971774,
+      "successful": 8,
+      "failed": 0,
+      "avg_latency": 2.842673711250427,
+      "throughput": 1.6029284997173479
+    }
+  ]
+}

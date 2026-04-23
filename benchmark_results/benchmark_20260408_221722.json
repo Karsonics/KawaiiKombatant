@@ -1,0 +1,492 @@
+{
+  "timestamp": "20260408_221722",
+  "args": {
+    "ref_audio": "/home/weeb_user/Documents/kawaii/KawaiiKombatant/assets/voices/megumi_padded.wav",
+    "ref_text": "For the cost of a meal and basic necessities, you can have the power of an archwizard.",
+    "ref_lang": "en",
+    "text_lang": "en",
+    "host": "127.0.0.1",
+    "port": 9880,
+    "runs": 3,
+    "output": "./benchmark_results",
+    "batch_sizes": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "concurrency": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "skip_warmup": false,
+    "skip_batch": false,
+    "skip_concurrency": false,
+    "skip_stress": false,
+    "compare": null,
+    "text_split_methods": [
+      "cut5",
+      "cut6",
+      "cut4"
+    ],
+    "languages": [
+      "en",
+      "zh",
+      "ja"
+    ],
+    "export_json": true,
+    "export_csv": true,
+    "save_audio": false,
+    "quiet": false
+  },
+  "summary": {
+    "total_tests": 24,
+    "total_requests": 110,
+    "failed_requests": 110,
+    "success_rate": 0.0
+  },
+  "category_results": [
+    {
+      "label": "short_0",
+      "category": "short",
+      "text": "Hello!",
+      "chars": 6,
+      "words": 1,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "short_1",
+      "category": "short",
+      "text": "How are you?",
+      "chars": 12,
+      "words": 3,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "short_2",
+      "category": "short",
+      "text": "Nice to meet you.",
+      "chars": 17,
+      "words": 4,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "short_3",
+      "category": "short",
+      "text": "Good morning!",
+      "chars": 13,
+      "words": 2,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "short_4",
+      "category": "short",
+      "text": "Thank you.",
+      "chars": 10,
+      "words": 2,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "medium_0",
+      "category": "medium",
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "chars": 44,
+      "words": 9,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "medium_1",
+      "category": "medium",
+      "text": "Artificial intelligence is transforming our world.",
+      "chars": 50,
+      "words": 6,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "medium_2",
+      "category": "medium",
+      "text": "Welcome to the future of voice synthesis.",
+      "chars": 41,
+      "words": 7,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "medium_3",
+      "category": "medium",
+      "text": "Machine learning enables incredible capabilities.",
+      "chars": 49,
+      "words": 5,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "medium_4",
+      "category": "medium",
+      "text": "Speech synthesis has come a long way.",
+      "chars": 37,
+      "words": 7,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "long_0",
+      "category": "long",
+      "text": "Artificial intelligence has transformed many industries over the past decade, enabling machines to perform tasks that previously required human intelligence, from recognizing speech and images to translating languages and driving cars.",
+      "chars": 235,
+      "words": 31,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "long_1",
+      "category": "long",
+      "text": "The history of computing spans thousands of years, from the abacus in ancient times to modern quantum computers, each generation building upon the innovations of those who came before.",
+      "chars": 184,
+      "words": 29,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "long_2",
+      "category": "long",
+      "text": "Climate change represents one of the greatest challenges facing humanity in the 21st century, requiring coordinated global action to mitigate its effects and adapt to its consequences.",
+      "chars": 184,
+      "words": 27,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "very_long_0",
+      "category": "very_long",
+      "text": "In the realm of artificial intelligence and machine learning, researchers have made remarkable strides in developing systems capable of understanding, processing, and generating human language. These advances have applications ranging from virtual assistants and chatbots to automated translation services and content generation. The ability of machines to not only comprehend but also produce natural-sounding speech represents a particularly fascinating frontier in AI development, one that combines expertise from acoustics, linguistics, and deep learning.",
+      "chars": 559,
+      "words": 73,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "very_long_1",
+      "category": "very_long",
+      "text": "Throughout history, human beings have sought to preserve and transmit knowledge across generations and cultures. From the earliest cave paintings and oral traditions to the invention of writing, the printing press, and now digital technologies, each new medium for recording and sharing information has fundamentally transformed society. Today, we stand at another pivotal moment in this ongoing story, where the boundaries between human and machine creativity are becoming increasingly blurred.",
+      "chars": 495,
+      "words": 70,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "stress_0",
+      "category": "stress",
+      "text": "Supercalifragilisticexpialidocious!",
+      "chars": 35,
+      "words": 1,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "stress_1",
+      "category": "stress",
+      "text": "The five boxing wizards jump quickly. A quick movement of the enemy will jeopardize six gunboats. All questions asked by five expert boxing wizards are answered!",
+      "chars": 161,
+      "words": 26,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "stress_2",
+      "category": "stress",
+      "text": "Unique New York Unique New York Unique New York You know you need unique New York Unique New York Unique New York",
+      "chars": 113,
+      "words": 22,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "punctuation_0",
+      "category": "punctuation",
+      "text": "Hello, world! How's it going? I'm doing great... really, I am!",
+      "chars": 62,
+      "words": 11,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "punctuation_1",
+      "category": "punctuation",
+      "text": "Wait... did you hear that? Yes, yes, I did! Absolutely incredible!",
+      "chars": 66,
+      "words": 11,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "punctuation_2",
+      "category": "punctuation",
+      "text": "Call me at 1-800-555-0199. Or email: test@example.com. Maybe both?",
+      "chars": 66,
+      "words": 9,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "numbers_0",
+      "category": "numbers",
+      "text": "The population of Earth is approximately 8 billion people as of 2024.",
+      "chars": 69,
+      "words": 12,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "numbers_1",
+      "category": "numbers",
+      "text": "Pi is approximately 3.14159. The square root of 2 is about 1.41421.",
+      "chars": 67,
+      "words": 12,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    },
+    {
+      "label": "numbers_2",
+      "category": "numbers",
+      "text": "In 1984, Apple released the Macintosh. In 2007, they introduced the iPhone.",
+      "chars": 75,
+      "words": 12,
+      "audio_duration": 0.0,
+      "times": [],
+      "failures": 3,
+      "error_messages": [
+        "HTTP 400",
+        "HTTP 400",
+        "HTTP 400"
+      ]
+    }
+  ],
+  "batch_results": [
+    {
+      "batch_size": 1,
+      "total_time": 0.0012290473338604595,
+      "individual_times": [
+        0.0012346910007181577,
+        0.0012173490031273104,
+        0.0012351019977359101
+      ],
+      "avg_per_item": 0.0012290473338604595,
+      "failures": 0
+    },
+    {
+      "batch_size": 2,
+      "total_time": 0.001228983999074747,
+      "individual_times": [
+        0.0013356919953366742,
+        0.0011919410026166588,
+        0.0011593189992709085
+      ],
+      "avg_per_item": 0.0006144919995373735,
+      "failures": 0
+    },
+    {
+      "batch_size": 4,
+      "total_time": 0.0011633459968531195,
+      "individual_times": [
+        0.0011733549981727265,
+        0.001164878995041363,
+        0.0011518039973452687
+      ],
+      "avg_per_item": 0.00029083649921327986,
+      "failures": 0
+    },
+    {
+      "batch_size": 8,
+      "total_time": 0.0012902430001607474,
+      "individual_times": [
+        0.0011933839996345341,
+        0.001414120000845287,
+        0.0012632250000024214
+      ],
+      "avg_per_item": 0.00016128037502009343,
+      "failures": 0
+    }
+  ],
+  "concurrency_results": [
+    {
+      "num_workers": 1,
+      "total_time": 0.0017395549948560074,
+      "successful": 0,
+      "failed": 1,
+      "avg_latency": 0,
+      "throughput": 0.0
+    },
+    {
+      "num_workers": 2,
+      "total_time": 0.003710876997502055,
+      "successful": 0,
+      "failed": 2,
+      "avg_latency": 0,
+      "throughput": 0.0
+    },
+    {
+      "num_workers": 4,
+      "total_time": 0.0053266780014382675,
+      "successful": 0,
+      "failed": 4,
+      "avg_latency": 0,
+      "throughput": 0.0
+    },
+    {
+      "num_workers": 8,
+      "total_time": 0.009956700996553991,
+      "successful": 0,
+      "failed": 8,
+      "avg_latency": 0,
+      "throughput": 0.0
+    }
+  ]
+}

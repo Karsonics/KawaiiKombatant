@@ -1,0 +1,25 @@
+Category,Label,Text,Chars,Words,Audio Duration,Successful Runs,Failures,Avg Time,Median Time,Min Time,Max Time,StdDev,P95,P99,RTF
+short,short_0,Hello!,6,1,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+short,short_1,How are you?,12,3,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+short,short_2,Nice to meet you.,17,4,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+short,short_3,Good morning!,13,2,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+short,short_4,Thank you.,10,2,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+medium,medium_0,The quick brown fox jumps over the lazy dog.,44,9,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+medium,medium_1,Artificial intelligence is transforming our world.,50,6,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+medium,medium_2,Welcome to the future of voice synthesis.,41,7,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+medium,medium_3,Machine learning enables incredible capabilities.,49,5,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+medium,medium_4,Speech synthesis has come a long way.,37,7,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+long,long_0,Artificial intelligence has transformed many indus,235,31,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+long,long_1,"The history of computing spans thousands of years,",184,29,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+long,long_2,Climate change represents one of the greatest chal,184,27,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+very_long,very_long_0,In the realm of artificial intelligence and machin,559,73,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+very_long,very_long_1,"Throughout history, human beings have sought to pr",495,70,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+stress,stress_0,Supercalifragilisticexpialidocious!,35,1,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+stress,stress_1,The five boxing wizards jump quickly. A quick move,161,26,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+stress,stress_2,Unique New York Unique New York Unique New York Yo,113,22,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+punctuation,punctuation_0,"Hello, world! How's it going? I'm doing great... r",62,11,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+punctuation,punctuation_1,"Wait... did you hear that? Yes, yes, I did! Absolu",66,11,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+punctuation,punctuation_2,Call me at 1-800-555-0199. Or email: test@example.,66,9,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+numbers,numbers_0,The population of Earth is approximately 8 billion,69,12,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+numbers,numbers_1,Pi is approximately 3.14159. The square root of 2 ,67,12,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
+numbers,numbers_2,"In 1984, Apple released the Macintosh. In 2007, th",75,12,0.00,0,3,0.00,0.00,0.00,0.00,0.00,0.00,0.00,nan
