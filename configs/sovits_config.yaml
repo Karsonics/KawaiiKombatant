@@ -1,32 +1,25 @@
-# SoVITS Advanced Configuration
+# GPT-SoVITS TTS Configuration
 
-model:
-  checkpoint_path: "./models/sovits_model.pth"
-  device: "cuda"  # or "cpu"
-  
-audio:
-  sampling_rate: 44100
-  hop_length: 256
-  win_length: 1024
-  n_fft: 2048
-  
+api:
+  base_url: "http://localhost:9880"
+  endpoint: "/tts"
+  timeout: 60
+
+reference:
+  audio_path: "/home/weeb_user/Documents/kawaii/KawaiiKombatant/assets/voices/megumi_clean.wav"
+  audio_text: "For the cost of a meal and basic necessities, you can have the power of an archwizard. Just give me a permanent spot in your party and I'm all yours"
+  # Language: en, ja, zh, etc.
+  language: "en"
+
 inference:
-  batch_size: 1
-  speed: 1.0
-  pitch_adjust: 0
-  energy_adjust: 1.0
-  
-optimization:
-  half_precision: true
-  num_threads: 4
-  cache_size: 100
-  
-preprocessing:
-  silence_threshold: -40
-  min_silence_length: 0.3
-  normalize_volume: true
-  
-postprocessing:
-  denoise: true
-  reverb: false
-  reverb_room_size: 0.1
+  speed_factor: 1.2
+  top_k: 5
+  top_p: 1.0
+  temperature: 1.0
+
+output:
+  sampling_rate: 44100
+  # true = play audio, false = only generate
+  auto_play: true
+  # true = async playback (non-blocking), false = blocks chat
+  async_playback: true

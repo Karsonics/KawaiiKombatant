@@ -8,37 +8,56 @@ import sounddevice as sd
 import soundfile as sf
 import tempfile
 import os
-from pathlib import Path
+import yaml
+import threading
 
 
-SOVITS_API_URL = "http://localhost:9880/tts"
+def load_config():
+    config_path = os.path.join(
+        os.path.dirname(__file__), 
+        "..", "..", "..", "configs", "sovits_config.yaml"
+    )
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
 
-# You need a reference audio clip of your character's voice
-# Record a few seconds of the voice you want, put it here
-REF_AUDIO_PATH = "/home/weeb_user/Documents/kawaii/KawaiiKombatant/assets/voices/megumi_clean.wav"
-REF_AUDIO_TEXT = "For the cost of a meal and basic necessities, you can have the power of an archwizard. Just give me a permanent spot in your party and I'm all yours" # what the ref audio says
+
+CONFIG = load_config()
+
+SOVITS_API_URL = f"{CONFIG['api']['base_url']}{CONFIG['api']['endpoint']}"
+REF_AUDIO_PATH = CONFIG['reference']['audio_path']
+REF_AUDIO_TEXT = CONFIG['reference']['audio_text']
+DEFAULT_LANG = CONFIG['reference']['language']
+SPEED_FACTOR = CONFIG['inference']['speed_factor']
+TOP_K = CONFIG['inference']['top_k']
+TOP_P = CONFIG['inference']['top_p']
+TEMPERATURE = CONFIG['inference']['temperature']
+TARGET_SR = CONFIG['output']['sampling_rate']
+ASYNC_PLAYBACK = CONFIG['output']['async_playback']
 
 
-def speak(text: str, lang: str = "en") -> bool:
+def speak(text: str, lang: str = None) -> bool:
     if not text.strip():
         return False
 
+    if lang is None:
+        lang = DEFAULT_LANG
+
     try:
         params = {
-    "text": text,
-    "text_lang": lang,
-    "ref_audio_path": REF_AUDIO_PATH,
-    "prompt_text": REF_AUDIO_TEXT,
-    "prompt_lang": lang,
-    "media_type": "wav",
-    "streaming_mode": "false",
-    "speed_factor": 1.2,        # add this - speeds up speech
-    "top_k": 5,                 # add this - faster inference
-    "top_p": 1.0,               # add this
-    "temperature": 1.0,         # add this
-}
+            "text": text,
+            "text_lang": lang,
+            "ref_audio_path": REF_AUDIO_PATH,
+            "prompt_text": REF_AUDIO_TEXT,
+            "prompt_lang": lang,
+            "media_type": "wav",
+            "streaming_mode": "false",
+            "speed_factor": SPEED_FACTOR,
+            "top_k": TOP_K,
+            "top_p": TOP_P,
+            "temperature": TEMPERATURE,
+        }
 
-        response = requests.get(SOVITS_API_URL, params=params, timeout=60)
+        response = requests.get(SOVITS_API_URL, params=params, timeout=CONFIG['api']['timeout'])
         response.raise_for_status()
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -47,20 +66,20 @@ def speak(text: str, lang: str = "en") -> bool:
 
         data, samplerate = sf.read(tmp_path)
         
-        # resample to 44100 if needed
-        target_sr = 44100
-        if samplerate != target_sr:
+        if samplerate != TARGET_SR:
             import librosa
             data = librosa.resample(data.T if data.ndim > 1 else data, 
-                                   orig_sr=samplerate, target_sr=target_sr)
+                                   orig_sr=samplerate, target_sr=TARGET_SR)
             if data.ndim > 1:
                 data = data.T
-            samplerate = target_sr
+            samplerate = TARGET_SR
 
-        sd.play(data, samplerate)
-        sd.wait()
+        if ASYNC_PLAYBACK:
+            threading.Thread(target=_play_audio, args=(data.copy(), samplerate, tmp_path), daemon=True).start()
+        else:
+            _play_audio(data, samplerate, tmp_path)
+            os.unlink(tmp_path)
 
-        os.unlink(tmp_path)
         return True
 
     except requests.exceptions.ConnectionError:
@@ -71,10 +90,19 @@ def speak(text: str, lang: str = "en") -> bool:
         return False
 
 
+def _play_audio(data, samplerate, tmp_path):
+    try:
+        sd.play(data, samplerate)
+        sd.wait()
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
 def check_api_available() -> bool:
     """Check if the TTS API is up."""
     try:
-        requests.get("http://localhost:9880/", timeout=3)
+        requests.get(CONFIG['api']['base_url'], timeout=3)
         return True
     except Exception:
         return False

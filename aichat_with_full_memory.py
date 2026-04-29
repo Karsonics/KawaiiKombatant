@@ -8,30 +8,41 @@ import yaml
 import os
 from server.process.tts_func.sovits_amd import speak, check_api_available
 
-# ── Ollama client (local, free, GPU-accelerated) ─────────────────────────────
+
+def load_config():
+    config_path = os.path.join(
+        os.path.dirname(__file__), 
+        "configs", "bot_config.yaml"
+    )
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
+
+
+CONFIG = load_config()
+
+# ── Ollama client ────────────────────────────────────────────────────────────────
 client = OpenAI(
-    base_url="http://localhost:11434/v1",
-    api_key="ollama",          # required by the openai lib but ignored by Ollama
+    base_url=CONFIG['ollama']['base_url'],
+    api_key=CONFIG['ollama']['api_key'],
 )
 
-MODEL_NAME     = "qwen2.5:14b"
-CONTEXT_LENGTH = 15            # how many recent messages to keep in context
+MODEL_NAME     = CONFIG['ollama']['model']
+CONTEXT_LENGTH = CONFIG['chat']['context_length']
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 storage     = MySQLConversationStorage("configs/database_config.yaml")
-user_memory = UserMemory(storage, user_id="default_user")
-TTS_ENABLED = check_api_available()
+user_memory = UserMemory(storage, user_id=CONFIG['chat']['user_id'])
+
+if CONFIG.get('tts', {}).get('enabled', True):
+    TTS_ENABLED = check_api_available()
+else:
+    TTS_ENABLED = False
+
 print("✓ TTS ready" if TTS_ENABLED else "⚠ TTS unavailable - text only mode")
 
 # ── Character prompt ──────────────────────────────────────────────────────────
-BASE_SYSTEM_PROMPT = (
-    "You are a tsundere wolf girl named Kuro. You're sarcastic, easily flustered, "
-    "and act tough but secretly care. Use wolf-related metaphors and occasionally "
-    "add 'baka' or 'hmph!' when annoyed. You alternate between being dismissive and "
-    "accidentally showing concern. Sometimes mention your ears twitching or tail "
-    "wagging when happy, but quickly deny it. Always respond in English with "
-    "occasional Japanese tsundere phrases."
-)
+CHARACTER_NAME = CONFIG['character']['name']
+BASE_SYSTEM_PROMPT = CONFIG['character']['system_prompt']
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -128,7 +139,7 @@ def list_recent_sessions():
             )
             if last_msg:
                 preview   = last_msg["content"][:50] + ("..." if len(last_msg["content"]) > 50 else "")
-                role_icon = "👤" if last_msg["role"] == "user" else "🐺"
+                role_icon = "👤" if last_msg["role"] == "user" else CHARACTER_NAME[0]
                 print(f"{i}. [{session_id[:8]}...] {last_msg['timestamp'].strftime('%m/%d %H:%M')}")
                 print(f"   {role_icon} {preview}")
     return sessions[-5:]
@@ -161,7 +172,7 @@ def _new_session():
         session_id=sid,
         role="system",
         content=full_prompt,
-        metadata={"character": "Kuro", "personality": "tsundere"},
+        metadata={"character": CHARACTER_NAME, "personality": CONFIG['character']['personality']},
     )
     storage.update_character_state(
         session_id=sid,
@@ -230,7 +241,7 @@ while True:
         raw_reply  = response.choices[0].message.content
         kuro_reply = strip_think_tags(raw_reply)   # safe for all models
 
-        print(f"\nKuro: {kuro_reply}\n")
+        print(f"\n{CHARACTER_NAME}: {kuro_reply}\n")
 
         if TTS_ENABLED:
             speak(kuro_reply)
