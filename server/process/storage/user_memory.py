@@ -66,30 +66,6 @@ class UserMemory:
             cursor.close()
             connection.close()
     
-    def _create_default_memory(self) -> Dict:
-        """Create default memory structure"""
-        return {
-            "personal_info": {},
-            "preferences": {},
-            "important_facts": [],
-            "detailed_preferences": {},  # For preferences with context
-            "conversation_summary": [],
-            "topics_discussed": []
-        }
-    
-    def _ensure_all_fields(self):
-        """Ensure all required fields exist in memory (for migration)"""
-        default_memory = self._create_default_memory()
-        modified = False
-        for key in default_memory:
-            if key not in self.memory:
-                self.memory[key] = default_memory[key]
-                modified = True
-        
-        # Save if we added any fields
-        if modified:
-            self.save_memory()
-    
     def save_memory(self):
         """Save memory to database"""
         connection = self.storage._get_connection()
