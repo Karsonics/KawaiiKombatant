@@ -140,6 +140,12 @@ async def run_voice(host: str = "localhost", port: int = 8765,
     await client.run()
 
 
+async def run_avatar(host: str = "localhost", port: int = 8765) -> None:
+    from avatar.avatar_client import AvatarClient
+    client = AvatarClient(host=host, port=port)
+    await client.run()
+
+
 def _parse_host_port() -> tuple[str, int]:
     host = "localhost"
     port = 8765
@@ -154,9 +160,15 @@ def _parse_host_port() -> tuple[str, int]:
 
 
 def main() -> None:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if "--avatar" in sys.argv and "--voice" in sys.argv:
+        print("--avatar and --voice cannot be combined. Use separate terminals.")
+        return
 
-    if "--voice" in sys.argv:
+    if "--avatar" in sys.argv:
+        host, port = _parse_host_port()
+        asyncio.run(run_avatar(host, port))
+
+    elif "--voice" in sys.argv:
         host, port = _parse_host_port()
         model = "base"
         for i, arg in enumerate(sys.argv):

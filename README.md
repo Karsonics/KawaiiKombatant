@@ -114,6 +114,76 @@ Clients send JSON messages to `ws://host:8765/ws`:
 
 Available commands: `history`, `memory`, `clear_memory`, `new_session`, `sessions`
 
+## Avatar (VTube Studio)
+
+Drive a Live2D avatar with Kuro's mood and emotions. Works with any VTube Studio-compatible model.
+
+### Setup
+
+1. **Install VTube Studio** on [Steam](https://store.steampowered.com/app/1325860/VTube_Studio/) (free)
+2. **Load a Live2D model** in VTS (see model sources below)
+3. **Enable the VTS API**: Settings → API → check "Start API"
+4. **Define expression hotkeys** in VTS for each mood:
+   - `Default`, `Happy`, `Annoyed`, `Curious`, `Excited`
+   - Hotkeys → Add → name must match `configs/vtube_config.yaml`
+5. **Run the avatar client** alongside KuroAPI:
+
+```bash
+# Terminal 1: KuroAPI
+python -m server.kuro_api
+
+# Terminal 2: Avatar client
+python -m avatar.avatar_client
+
+# Or via bot_main.py
+python bot_main.py --avatar
+```
+
+### Config
+
+Edit `configs/vtube_config.yaml`:
+
+```yaml
+# Mood → hotkey mapping (match what you defined in VTS)
+expressions:
+  neutral:  "Default"
+  happy:    "Happy"
+  annoyed:  "Annoyed"
+  curious:  "Curious"
+  excited:  "Excited"
+
+# Auto-load a model by ID (find with --list-models)
+model_id: ""
+
+# Idle animations trigger periodically when Kuro is quiet
+idle:
+  interval_seconds: 20
+  animations:
+    - "IdleBlink"
+    - "IdleLookAround"
+```
+
+### Finding model IDs
+
+```bash
+python -m avatar.avatar_client --list-models
+```
+
+### Env overrides
+
+```bash
+VTS_HOST=192.168.1.5 KAPI_PORT=9000 python -m avatar.avatar_client
+```
+
+### Free Live2D Models
+
+| Model | Source | Notes |
+|-------|--------|-------|
+| Hiyori Momose | [live2d.com/en/learn/sample/](https://www.live2d.com/en/learn/sample/) | Official sample, Neuro-sama's original |
+| Lisette | [shiralive2d.com](https://shiralive2d.com/live2d-sample-models/) | 3 expressions, VTS ready |
+| Cat VTuber | [chycero.gumroad.com/l/freevt](https://chycero.gumroad.com/l/freevt) | Simple cat girl, 1.27 MB |
+| 模之屋 | [aplaybox.com](https://www.aplaybox.com/) | Large free library |
+
 ## Voice Pipeline
 
 Hold the spacebar to talk to Kuro hands-free:
@@ -192,6 +262,17 @@ KawaiiKombatant/
 │       ├── tts_func/            # TTS client (GPT-SoVITS)
 │       │   └── sovits_amd.py
 │       └── asr_func/            # Speech recognition (stub)
+├── avatar/                      # VTube Studio avatar integration
+│   ├── __init__.py
+│   ├── emotion_map.py           # Mood → expression config loader
+│   ├── vtube_controller.py      # VTS WebSocket handler
+│   └── avatar_client.py         # Main avatar client
+├── voice/                       # Voice pipeline
+│   ├── __init__.py
+│   ├── mic.py                   # Mic capture
+│   ├── vad.py                   # Voice activity detection
+│   ├── asr.py                   # Speech recognition
+│   └── voice_client.py          # Push-to-talk client
 ├── utils/                       # Utilities
 │   ├── __init__.py
 │   ├── logging.py              # Structured logging

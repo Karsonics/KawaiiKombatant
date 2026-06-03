@@ -8,6 +8,7 @@ from server.kuro_engine import KuroEngine
 from utils.logging import logger
 
 engine = KuroEngine()
+_mood_subscribers: set[WebSocket] = set()
 app = FastAPI(title="Kuro V-Tuber Engine")
 
 
@@ -53,17 +54,23 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     )
                     session_id = result["session_id"]
                     await ws.send_json({"type": "done", "data": result})
+                    await _broadcast_mood(result["mood"], result.get("emotion", 0.5))
                 except Exception as e:
                     logger.error("process_message error: %s", e)
                     await ws.send_json({"type": "error", "data": str(e)})
 
             elif msg_type == "command":
                 cmd = msg.get("command", "")
-                result_data = _handle_command(cmd, session_id)
-                if isinstance(result_data, str):
-                    await ws.send_json({"type": "command_result", "command": cmd, "data": result_data})
+
+                if cmd == "subscribe_mood":
+                    _mood_subscribers.add(ws)
+                    await ws.send_json({"type": "command_result", "command": cmd, "data": "Subscribed to mood updates"})
                 else:
-                    await ws.send_json(result_data)
+                    result_data = _handle_command(cmd, session_id)
+                    if isinstance(result_data, str):
+                        await ws.send_json({"type": "command_result", "command": cmd, "data": result_data})
+                    else:
+                        await ws.send_json(result_data)
 
                 if cmd == "new_session":
                     session_id = None
@@ -72,9 +79,24 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 await ws.send_json({"type": "error", "data": f"Unknown message type: {msg_type}"})
 
     except WebSocketDisconnect:
+        _mood_subscribers.discard(ws)
         logger.info("WebSocket client disconnected")
     except Exception as e:
+        _mood_subscribers.discard(ws)
         logger.error("WebSocket error: %s", e)
+
+
+async def _broadcast_mood(mood: str, emotion: float) -> None:
+    if not _mood_subscribers:
+        return
+    msg = {"type": "mood_update", "data": {"mood": mood, "emotion": emotion}}
+    dead = set()
+    for ws in _mood_subscribers:
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            dead.add(ws)
+    _mood_subscribers.difference_update(dead)
 
 
 def _handle_command(cmd: str, session_id: str | None) -> str | dict:

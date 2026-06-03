@@ -217,5 +217,13 @@
     [x] Also scrubbed configs/database_config.yaml (MySQL creds)
     [x] Pre-commit hook installed (.git/hooks/pre-commit — blocks tokens/secrets)
     [x] .gitignore updated (added token, code.py, *discord*, *bot_token*)
-    [ ] PENDING: Revoke Discord token in Discord Developer Portal
-    [ ] PENDING: gh auth login + git push origin --force --all
+[ ] PENDING: Revoke Discord token in Discord Developer Portal
+[ ] PENDING: gh auth login + git push origin --force --all
+[x] Phase 2: VTube Studio avatar integration
+    [x] configs/vtube_config.yaml — VTS host/port, expression maps, idle anims
+    [x] avatar/emotion_map.py — config loader with env var overrides
+    [x] avatar/vtube_controller.py — VTS WebSocket handler (auth, hotkeys, models)
+    [x] avatar/avatar_client.py — KuroAPI WS listener + VTS expression sync
+    [x] server/kuro_api.py — mood broadcast to subscribed clients
+    [x] bot_main.py — --avatar flag added
+    [x] Updated README with avatar setup + model sources

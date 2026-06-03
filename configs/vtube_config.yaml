@@ -1,0 +1,32 @@
+# VTube Studio Avatar Configuration
+
+vts:
+  host: "127.0.0.1"
+  port: 8001
+  plugin_name: "Kuro Avatar"
+  plugin_developer: "local"
+
+kuro_api:
+  host: "localhost"
+  port: 8765
+
+# Auto-load this model on connect (leave empty to skip)
+# Find model IDs with: python -m avatar.avatar_client --list-models
+model_id: ""
+
+# Mood → Expression hotkey mapping
+# Define these hotkeys in VTube Studio for your model's expressions
+expressions:
+  neutral:  "Default"
+  happy:    "Happy"
+  annoyed:  "Annoyed"
+  curious:  "Curious"
+  excited:  "Excited"
+
+# Idle animations (triggers periodically when Kuro isn't speaking)
+idle:
+  interval_seconds: 20
+  animations:
+    - "IdleBlink"
+    - "IdleLookAround"
+    - "IdleTilt"
