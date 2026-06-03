@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kuro — AI VTuber</title>
+  <link rel="stylesheet" href="static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐺</text></svg>">
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="logo">K</div>
+      <button class="active" id="btn-chat" title="Chat">💬</button>
+      <button id="btn-history" title="History">📋</button>
+      <button id="btn-memory" title="Memory">🧠</button>
+      <div class="spacer"></div>
+      <button id="btn-settings" title="Settings">⚙️</button>
+      <div class="status-dot" id="status-dot" title="Disconnected"></div>
+    </nav>
+
+    <!-- Main area -->
+    <div class="main">
+      <!-- Header -->
+      <header class="header">
+        <h1>Kuro</h1>
+        <span class="meta" id="session-label">no session</span>
+        <span class="mood-badge" id="mood-badge">😐 neutral</span>
+      </header>
+
+      <!-- Content -->
+      <div class="content" id="content">
+        <!-- Chat panel -->
+        <div class="chat-panel">
+          <div class="messages" id="messages"></div>
+          <div class="input-area" id="input-area">
+            <button class="btn-icon" id="btn-voice" title="Push to talk (hold space)">🎤</button>
+            <textarea id="input" rows="1" placeholder="Message Kuro..." maxlength="2000"></textarea>
+            <button class="btn-send" id="btn-send">Send</button>
+          </div>
+        </div>
+
+        <!-- Avatar panel -->
+        <div class="avatar-panel" id="avatar-panel">
+          <canvas id="live2d-canvas"></canvas>
+          <div class="live2d-placeholder" id="live2d-placeholder">
+            <div class="avatar-ring" id="avatar-ring" data-mood="neutral">
+              <span class="mood-emoji" id="mood-emoji">😐</span>
+            </div>
+            <div class="mood-label">Feeling <span id="mood-text">neutral</span></div>
+            <div class="connection-status" id="conn-status">
+              <span class="dot offline" id="conn-dot"></span>
+              <span id="conn-text">disconnected</span>
+            </div>
+            <div class="hint">Place Live2D model files in <code>web/models/</code></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings drawer -->
+  <div class="drawer-overlay" id="drawer-overlay"></div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-header">
+      <h2>Settings</h2>
+      <button class="close-btn" id="drawer-close">✕</button>
+    </div>
+    <div class="drawer-body">
+      <section>
+        <h3>Connection</h3>
+        <div class="field">
+          <label>Server URL</label>
+          <input type="text" id="cfg-server" value="ws://localhost:8765" placeholder="ws://host:port">
+        </div>
+        <button class="btn-primary" id="btn-reconnect">Reconnect</button>
+      </section>
+      <section>
+        <h3>Chat</h3>
+        <div class="field">
+          <label>Context length</label>
+          <select id="cfg-context">
+            <option value="5">5 messages</option>
+            <option value="10" selected>10 messages</option>
+            <option value="15">15 messages</option>
+            <option value="20">20 messages</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Session</label>
+          <select id="cfg-session"><option value="">New session</option></select>
+        </div>
+        <button class="btn-primary" id="btn-new-session">New Session</button>
+      </section>
+      <section>
+        <h3>Avatar</h3>
+        <div class="field">
+          <label>Mood emoji style</label>
+          <select id="cfg-emoji-style">
+            <option value="emoji">Emoji</option>
+            <option value="text">Text</option>
+          </select>
+        </div>
+      </section>
+      <section>
+        <h3>About</h3>
+        <p style="font-size:13px;color:var(--text-muted);line-height:1.5;">
+          Kuro AI VTuber Engine v0.2<br>
+          Powered by Ollama + GPT-SoVITS + MySQL<br>
+          <a href="#" style="color:var(--accent);" id="memory-link">View full memory</a>
+        </p>
+      </section>
+    </div>
+    <div class="drawer-footer">
+      Kuro — <span id="footer-info">disconnected</span>
+    </div>
+  </div>
+
+  <script src="static/app.js"></script>
+</body>
+</html>

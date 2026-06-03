@@ -95,6 +95,16 @@ def _validate_configs(config: dict) -> tuple[list, list]:
     return errors, warnings
 
 
+class _NullStorage:
+    def add_message(self, *args, **kwargs): return 0
+    def get_recent_context(self, *args, **kwargs): return []
+    def get_conversation_history(self, *args, **kwargs): return []
+    def get_all_sessions(self, *args, **kwargs): return []
+    def update_character_state(self, *args, **kwargs): pass
+    def get_character_state(self, *args, **kwargs): return None
+    def close(self): pass
+
+
 class KuroEngine:
     def __init__(self, config_path: str = "configs/bot_config.yaml") -> None:
         config_path = os.path.join(
@@ -130,8 +140,15 @@ class KuroEngine:
         db_config_path = os.path.join(
             os.path.dirname(__file__), "..", "configs", "database_config.yaml"
         )
-        self.storage = MySQLConversationStorage(db_config_path)
-        self.user_memory = UserMemory(self.storage, user_id=self.user_id)
+        try:
+            self.storage = MySQLConversationStorage(db_config_path)
+            self.user_memory = UserMemory(self.storage, user_id=self.user_id)
+            self.db_available = True
+        except Exception as e:
+            logger.warning("Database unavailable (%s) — running without persistence", e)
+            self.storage = _NullStorage()
+            self.user_memory = UserMemory(self.storage, user_id=self.user_id)
+            self.db_available = False
 
         if self.config.get("tts", {}).get("enabled", True):
             self.tts_enabled = check_api_available()

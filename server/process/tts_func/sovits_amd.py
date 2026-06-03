@@ -1,12 +1,18 @@
 import requests
-import sounddevice as sd
-import soundfile as sf
 import tempfile
 import os
 import yaml
 import threading
 
 from utils.logging import logger
+
+_TTS_DEPS = True
+try:
+    import sounddevice as sd
+    import soundfile as sf
+except ImportError:
+    _TTS_DEPS = False
+    logger.warning("sounddevice/soundfile not available — TTS playback disabled")
 
 
 def load_config():
@@ -40,6 +46,9 @@ ASYNC_PLAYBACK = CONFIG['output']['async_playback']
 
 
 def speak(text: str, lang: str = None) -> bool:
+    if not _TTS_DEPS:
+        logger.debug("TTS deps missing, skipping audio playback")
+        return False
     if not text.strip():
         return False
 
@@ -95,6 +104,8 @@ def speak(text: str, lang: str = None) -> bool:
 
 
 def _play_audio(data, samplerate, tmp_path):
+    if not _TTS_DEPS:
+        return
     try:
         sd.play(data, samplerate)
         sd.wait()

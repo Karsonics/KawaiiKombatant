@@ -34,7 +34,10 @@ class UserMemory:
             self.save_memory()
 
     def _load_memory(self) -> Dict:
-        connection = self.storage._get_connection()
+        try:
+            connection = self.storage._get_connection()
+        except Exception:
+            return self._create_default_memory()
         cursor = connection.cursor(dictionary=True)
 
         try:
@@ -60,7 +63,10 @@ class UserMemory:
             connection.close()
 
     def save_memory(self) -> None:
-        connection = self.storage._get_connection()
+        try:
+            connection = self.storage._get_connection()
+        except Exception:
+            return
         cursor = connection.cursor()
 
         try:

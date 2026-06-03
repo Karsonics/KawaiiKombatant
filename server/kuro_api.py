@@ -1,7 +1,11 @@
 import asyncio
 import json
+import os
 import sys
+from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from server.kuro_engine import KuroEngine
@@ -10,6 +14,22 @@ from utils.logging import logger
 engine = KuroEngine()
 _mood_subscribers: set[WebSocket] = set()
 app = FastAPI(title="Kuro V-Tuber Engine")
+
+
+_web_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "web"
+if _web_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(_web_dir)), name="web_static")
+    app.mount("/models", StaticFiles(directory=str(_web_dir / "models")), name="web_models")
+
+    @app.get("/")
+    async def web_root():
+        return FileResponse(str(_web_dir / "index.html"))
+
+    @app.get("/settings")
+    async def web_settings():
+        return FileResponse(str(_web_dir / "settings.html"))
+
+    logger.info("Web UI static files mounted from %s", _web_dir)
 
 
 @app.on_event("shutdown")
@@ -115,11 +135,8 @@ def _handle_command(cmd: str, session_id: str | None) -> str | dict:
     elif cmd == "sessions":
         recent = engine.get_recent_sessions()
         if not recent:
-            return "No sessions found"
-        lines = []
-        for s in recent:
-            lines.append(f"  [{s['session_id'][:8]}...] {s['timestamp']} - {s['preview']}")
-        return "Recent sessions:\n" + "\n".join(lines)
+            return {"type": "command_result", "command": cmd, "data": [], "display": "No sessions found"}
+        return {"type": "command_result", "command": cmd, "data": recent}
     else:
         return {"type": "error", "data": f"Unknown command: {cmd}"}
 
