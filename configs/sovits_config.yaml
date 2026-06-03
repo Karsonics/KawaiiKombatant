@@ -6,7 +6,7 @@ api:
   timeout: 60
 
 reference:
-  audio_path: "/home/weeb_user/Documents/kawaii/KawaiiKombatant/assets/voices/megumi_clean.wav"
+  audio_path: "./assets/voices/megumi_clean.wav"
   audio_text: "For the cost of a meal and basic necessities, you can have the power of an archwizard. Just give me a permanent spot in your party and I'm all yours"
   # Language: en, ja, zh, etc.
   language: "en"

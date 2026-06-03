@@ -1,29 +1,30 @@
 import mysql.connector
 from mysql.connector import Error, pooling
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import yaml
 import json
 
+from utils.logging import logger
+from utils.retry import retry
+
+
 class MySQLConversationStorage:
-    def __init__(self, config_path: str = "configs/database_config.yaml"):
-        """Initialize MySQL connection pool and setup tables"""
+    def __init__(self, config_path: str = "configs/database_config.yaml") -> None:
         self.config = self._load_config(config_path)
-        self.connection_pool = None
+        self.connection_pool: Optional[pooling.MySQLConnectionPool] = None
         self._create_connection_pool()
         self._initialize_database()
-    
+
     def _load_config(self, config_path: str) -> dict:
-        """Load database configuration from YAML file"""
         with open(config_path, 'r') as f:
             return yaml.safe_load(f)
-    
-    def _create_connection_pool(self):
-        """Create a connection pool for efficient database access"""
+
+    def _create_connection_pool(self) -> None:
         try:
             mysql_config = self.config['mysql']
             connection_config = self.config['connection']
-            
+
             self.connection_pool = pooling.MySQLConnectionPool(
                 pool_name="kawaii_pool",
                 pool_size=connection_config['max_connections'],
@@ -34,28 +35,25 @@ class MySQLConversationStorage:
                 user=mysql_config['username'],
                 password=mysql_config['password']
             )
-            print("✓ MySQL connection pool created successfully")
+            logger.info("MySQL connection pool created successfully")
         except Error as e:
-            print(f"✗ Error creating connection pool: {e}")
+            logger.error("Error creating connection pool: %s", e)
             raise
-    
+
     def _get_connection(self):
-        """Get a connection from the pool"""
         try:
             return self.connection_pool.get_connection()
         except Error as e:
-            print(f"✗ Error getting connection: {e}")
+            logger.error("Error getting connection: %s", e)
             raise
-    
-    def _initialize_database(self):
-        """Create necessary tables if they don't exist"""
+
+    def _initialize_database(self) -> None:
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor()
-            
-            # Create conversations table
+
             conversations_table = f"""
             CREATE TABLE IF NOT EXISTS {self.config['tables']['conversations']} (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -69,8 +67,7 @@ class MySQLConversationStorage:
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci
             """
             cursor.execute(conversations_table)
-            
-            # Create character states table
+
             character_states_table = f"""
             CREATE TABLE IF NOT EXISTS {self.config['tables']['character_states']} (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -83,8 +80,7 @@ class MySQLConversationStorage:
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci
             """
             cursor.execute(character_states_table)
-            
-            # Create user preferences table
+
             user_preferences_table = f"""
             CREATE TABLE IF NOT EXISTS {self.config['tables']['user_preferences']} (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -96,41 +92,41 @@ class MySQLConversationStorage:
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci
             """
             cursor.execute(user_preferences_table)
-            
+
             connection.commit()
-            print("✓ Database tables initialized successfully")
-            
+            logger.info("Database tables initialized successfully")
+
         except Error as e:
-            print(f"✗ Error initializing database: {e}")
+            logger.error("Error initializing database: %s", e)
             raise
         finally:
             if cursor:
                 cursor.close()
             if connection:
                 connection.close()
-    
-    def add_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None):
-        """Add a single message to the conversation history"""
+
+    @retry(max_attempts=3, delay=2, backoff=2)
+    def add_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None) -> int:
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor()
-            
+
             table_name = self.config['tables']['conversations']
             metadata_json = json.dumps(metadata) if metadata else None
-            
+
             query = f"""
             INSERT INTO {table_name} (session_id, role, content, metadata)
             VALUES (%s, %s, %s, %s)
             """
             cursor.execute(query, (session_id, role, content, metadata_json))
             connection.commit()
-            
+
             return cursor.lastrowid
-            
+
         except Error as e:
-            print(f"✗ Error adding message: {e}")
+            logger.error("Error adding message: %s", e)
             if connection:
                 connection.rollback()
             raise
@@ -139,17 +135,16 @@ class MySQLConversationStorage:
                 cursor.close()
             if connection:
                 connection.close()
-    
+
     def get_conversation_history(self, session_id: str, limit: Optional[int] = None) -> List[Dict]:
-        """Retrieve conversation history for a session"""
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor(dictionary=True)
-            
+
             table_name = self.config['tables']['conversations']
-            
+
             if limit:
                 query = f"""
                 SELECT role, content, timestamp, metadata
@@ -167,46 +162,42 @@ class MySQLConversationStorage:
                 ORDER BY timestamp ASC
                 """
                 cursor.execute(query, (session_id,))
-            
+
             results = cursor.fetchall()
-            
-            # Parse metadata from TEXT (stored as JSON string)
+
             for result in results:
                 if result['metadata']:
                     try:
                         result['metadata'] = json.loads(result['metadata'])
                     except (json.JSONDecodeError, TypeError):
                         result['metadata'] = None
-            
-            # Reverse if we used LIMIT (to get most recent first, then reverse to chronological)
+
             if limit:
                 results.reverse()
-            
+
             return results
-            
+
         except Error as e:
-            print(f"✗ Error retrieving conversation history: {e}")
+            logger.error("Error retrieving conversation history: %s", e)
             raise
         finally:
             if cursor:
                 cursor.close()
             if connection:
                 connection.close()
-    
+
     def get_recent_context(self, session_id: str, context_length: int = 10) -> List[Dict]:
-        """Get recent messages for context window"""
         return self.get_conversation_history(session_id, limit=context_length)
-    
-    def update_character_state(self, session_id: str, mood: str, emotion_level: float, context_summary: str):
-        """Update or insert character state for a session"""
+
+    def update_character_state(self, session_id: str, mood: str, emotion_level: float, context_summary: str) -> None:
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor()
-            
+
             table_name = self.config['tables']['character_states']
-            
+
             query = f"""
             INSERT INTO {table_name} (session_id, mood, emotion_level, context_summary)
             VALUES (%s, %s, %s, %s)
@@ -218,9 +209,9 @@ class MySQLConversationStorage:
             """
             cursor.execute(query, (session_id, mood, emotion_level, context_summary))
             connection.commit()
-            
+
         except Error as e:
-            print(f"✗ Error updating character state: {e}")
+            logger.error("Error updating character state: %s", e)
             if connection:
                 connection.rollback()
             raise
@@ -229,54 +220,49 @@ class MySQLConversationStorage:
                 cursor.close()
             if connection:
                 connection.close()
-    
+
     def get_character_state(self, session_id: str) -> Optional[Dict]:
-        """Retrieve character state for a session"""
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor(dictionary=True)
-            
+
             table_name = self.config['tables']['character_states']
-            
+
             query = f"""
             SELECT mood, emotion_level, context_summary, last_updated
             FROM {table_name}
             WHERE session_id = %s
             """
             cursor.execute(query, (session_id,))
-            
+
             return cursor.fetchone()
-            
+
         except Error as e:
-            print(f"✗ Error retrieving character state: {e}")
+            logger.error("Error retrieving character state: %s", e)
             raise
         finally:
             if cursor:
                 cursor.close()
             if connection:
                 connection.close()
-    
-    def clear_session(self, session_id: str):
-        """Clear all data for a specific session"""
+
+    def clear_session(self, session_id: str) -> None:
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor()
-            
-            # Clear conversations
+
             cursor.execute(f"DELETE FROM {self.config['tables']['conversations']} WHERE session_id = %s", (session_id,))
-            
-            # Clear character state
             cursor.execute(f"DELETE FROM {self.config['tables']['character_states']} WHERE session_id = %s", (session_id,))
-            
+
             connection.commit()
-            print(f"✓ Session {session_id} cleared successfully")
-            
+            logger.info("Session %s cleared successfully", session_id)
+
         except Error as e:
-            print(f"✗ Error clearing session: {e}")
+            logger.error("Error clearing session: %s", e)
             if connection:
                 connection.rollback()
             raise
@@ -285,33 +271,29 @@ class MySQLConversationStorage:
                 cursor.close()
             if connection:
                 connection.close()
-    
+
     def get_all_sessions(self) -> List[str]:
-        """Get list of all session IDs"""
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor()
-            
+
             table_name = self.config['tables']['conversations']
             query = f"SELECT DISTINCT session_id FROM {table_name}"
             cursor.execute(query)
-            
+
             return [row[0] for row in cursor.fetchall()]
-            
+
         except Error as e:
-            print(f"✗ Error retrieving sessions: {e}")
+            logger.error("Error retrieving sessions: %s", e)
             raise
         finally:
             if cursor:
                 cursor.close()
             if connection:
                 connection.close()
-    
-    def close(self):
-        """Close the connection pool"""
+
+    def close(self) -> None:
         if self.connection_pool:
-            # Connection pools don't have a direct close method
-            # Connections are returned to pool automatically
-            print("✓ MySQL storage closed")
+            logger.info("MySQL storage closed")

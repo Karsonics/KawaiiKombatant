@@ -1,8 +1,3 @@
-"""
-GPT-SoVITS TTS client for AMD GPU
-Calls the api_v2.py REST endpoint and plays audio back
-"""
-
 import requests
 import sounddevice as sd
 import soundfile as sf
@@ -11,14 +6,23 @@ import os
 import yaml
 import threading
 
+from utils.logging import logger
+
 
 def load_config():
     config_path = os.path.join(
-        os.path.dirname(__file__), 
+        os.path.dirname(__file__),
         "..", "..", "..", "configs", "sovits_config.yaml"
     )
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+
+    ref_path = cfg['reference']['audio_path']
+    if not os.path.isabs(ref_path):
+        cfg['reference']['audio_path'] = os.path.abspath(
+            os.path.join(os.path.dirname(config_path), "..", ref_path)
+        )
+    return cfg
 
 
 CONFIG = load_config()
@@ -65,10 +69,10 @@ def speak(text: str, lang: str = None) -> bool:
             tmp_path = tmp.name
 
         data, samplerate = sf.read(tmp_path)
-        
+
         if samplerate != TARGET_SR:
             import librosa
-            data = librosa.resample(data.T if data.ndim > 1 else data, 
+            data = librosa.resample(data.T if data.ndim > 1 else data,
                                    orig_sr=samplerate, target_sr=TARGET_SR)
             if data.ndim > 1:
                 data = data.T
@@ -83,10 +87,10 @@ def speak(text: str, lang: str = None) -> bool:
         return True
 
     except requests.exceptions.ConnectionError:
-        print("  [TTS] GPT-SoVITS API not reachable - is api_v2.py running on port 9880?")
+        logger.warning("GPT-SoVITS API not reachable - is api_v2.py running on port 9880?")
         return False
     except Exception as e:
-        print(f"  [TTS] Error: {e}")
+        logger.error("TTS error: %s", e)
         return False
 
 
@@ -100,7 +104,6 @@ def _play_audio(data, samplerate, tmp_path):
 
 
 def check_api_available() -> bool:
-    """Check if the TTS API is up."""
     try:
         requests.get(CONFIG['api']['base_url'], timeout=3)
         return True

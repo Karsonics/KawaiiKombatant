@@ -1,1 +1,7 @@
-1:ask if i can use docker with gpt so vits amd fork
+TODO:
+- docker-compose for ollama + gptsovits + mysql
+- wire up ASR (speech recognition)
+- replace regex entity extraction with LLM-based extraction
+- add web UI (gradio or fastapi)
+- batch database writes instead of per-message
+- conversation summarization for long contexts

@@ -1,50 +1,51 @@
 # KawaiiKombatant
 
-An AI-powered character chatbot with TTS (text-to-speech), ASR (speech recognition), and conversation memory.
+An AI-powered character chatbot with TTS (text-to-speech), ASR (speech recognition),
+and conversation memory. Powered by Ollama + GPT-SoVITS + MySQL.
 
-## Features
+## Quickstart
 
-- **LLM Dialogue** - Powered by Ollama (local) or OpenAI-compatible APIs
-- **Voice Output** - GPT-SoVITS for text-to-speech
-- **Speech Recognition** - Faster-Whisper support
-- **Conversation Memory** - MySQL-backed user memory across sessions
-- **YAML Config** - Full configuration via config files
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Make sure MySQL, Ollama, and GPT-SoVITS API are running
+
+# 3. Run the bot
+python bot_main.py
+```
 
 ## Requirements
 
-- Python 3.10+
-- MySQL database
-- Ollama (for local LLM)
-- GPT-SoVITS API server running on port 9880
+- **Python** 3.10+
+- **MySQL** 8.x (for conversation & memory persistence)
+- **Ollama** with a model pulled (default: `qwen2.5:14b`)
+- **GPT-SoVITS API** server (optional, for TTS)
 
-## Installation
+### Arch Linux
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Core dependencies
+sudo pacman -S python python-pip mysql ollama
 
-# Configure your settings (see Configuration section below)
+# ROCm GPU acceleration (if using AMD GPU)
+sudo pacman -S python-pytorch-rocm ollama-rocm
 
-# Start GPT-SoVITS API (Terminal 1)
-conda activate GPTSoVits
-cd /path/to/GPT-SoVITS
-PYTORCH_ROCM_ARCH=gfx1200 PYTHONPATH=/path/to/GPT-SoVITS python api_v2.py -a 0.0.0.0 -p 9880
-
-# Run the bot (Terminal 2)
-cd /path/to/KawaiiKombatant
-python aichat_with_full_memory.py
+# Audio libraries
+sudo pacman -S portaudio pulseaudio-alsa  # or pipewire-pulse
 ```
 
 ## Configuration
 
-All settings are in `configs/`:
+All settings live in `configs/`:
 
 | File | Purpose |
 |------|---------|
-| `bot_config.yaml` | LLM model, character, chat settings |
-| `sovits_config.yaml` | TTS voice, speed, audio settings |
-| `database_config.yaml` | MySQL connection |
-| `character_config.yaml` | Personality presets |
+| `bot_config.yaml` | LLM model, character prompt, chat settings |
+| `sovits_config.yaml` | TTS API endpoint, voice reference audio |
+| `database_config.yaml` | MySQL connection (gitignored — contains credentials) |
+| `character_config.yaml` | Personality presets (tsundere, kuudere, default) |
+| `presets/` | Detailed personality profile files |
 
 ### Changing the Character
 
@@ -53,7 +54,7 @@ Edit `configs/bot_config.yaml`:
 ```yaml
 character:
   name: "YourCharacter"
-  personality: "tsundere"  # or any custom personality
+  personality: "tsundere"
   system_prompt: |
     Your custom system prompt here...
 ```
@@ -64,51 +65,104 @@ Edit `configs/sovits_config.yaml`:
 
 ```yaml
 reference:
-  audio_path: "/path/to/your/reference.wav"
-  audio_text: "Words spoken in the reference"
+  audio_path: "./assets/voices/your_reference.wav"
+  audio_text: "Words spoken in the reference audio"
   language: "en"
 ```
 
 ## Commands
 
-While running the bot:
+While the bot is running:
 
-- `exit` - Save and exit
-- `history` - Show conversation history
-- `memory` - Display stored user memories
-- `clear_memory` - Clear all user data
+- `exit` — Save and exit
+- `history` — Show full conversation history
+- `memory` — Display stored user memories
+- `clear_memory` — Clear all stored user data
+
+## Session Manager
+
+The session manager utility lets you list, view, export, import, and clear sessions:
+
+```bash
+# List all sessions
+python -m utils.session_manager list
+
+# View a session
+python -m utils.session_manager view -s <session-id>
+
+# Export to text
+python -m utils.session_manager export -s <session-id> -o chat.txt
+
+# Export to JSON (re-importable)
+python -m utils.session_manager export -s <session-id> -o chat.json -f json
+
+# Import a JSON export as a new session
+python -m utils.session_manager import -o chat.json
+
+# Clear a session
+python -m utils.session_manager clear -s <session-id>
+```
 
 ## Project Structure
 
 ```
 KawaiiKombatant/
-├── aichat_with_full_memory.py   # Main bot entry
-├── configs/                     # Configuration files
+├── bot_main.py                  # Main entry point
+├── configs/                     # YAML configuration files
 │   ├── bot_config.yaml
 │   ├── sovits_config.yaml
 │   ├── database_config.yaml
-│   └── character_config.yaml
+│   ├── character_config.yaml
+│   └── presets/
 ├── server/process/
 │   ├── storage/                 # Database & memory
 │   │   ├── mysql_storage.py
 │   │   └── user_memory.py
-│   ├── tts_func/               # TTS client
+│   ├── tts_func/               # TTS client (GPT-SoVITS)
 │   │   └── sovits_amd.py
-│   └── asr_func/               # Speech recognition
+│   └── asr_func/               # Speech recognition (stub)
 ├── utils/                       # Utilities
-│   └── session_manager.py
-└── tests/                       # Test files
+│   ├── __init__.py
+│   ├── logging.py              # Structured logging
+│   ├── retry.py                # Retry decorator
+│   └── session_manager.py      # CLI session management
+├── tests/                       # Test files
+│   ├── test_llm.py
+│   ├── test_extract_user_info.py
+│   ├── test_gpu.py
+│   └── ...
+└── assets/voices/               # TTS reference audio
 ```
 
 ## Troubleshooting
 
 **TTS not working**
-- Ensure GPT-SoVITS API is running on port 9880
-- Check reference audio is 3-10 seconds
+- Ensure GPT-SoVITS API is running: `python api_v2.py -a 0.0.0.0 -p 9880`
+- Check reference audio exists at the path in `sovits_config.yaml`
+- Reference audio should be 3–10 seconds of clean speech
 
 **Ollama not connecting**
 - Run `ollama serve` in a separate terminal
-- Check model name in `bot_config.yaml`
+- Verify model is pulled: `ollama list`
+- Check model name in `bot_config.yaml` matches `ollama list`
+
+**Database errors**
+- Ensure MySQL is running: `systemctl status mysql`
+- Verify credentials in `database_config.yaml` (this file is gitignored)
+- Run `python tests/testConnection.py` to test connectivity
+
+**Logs**
+- A `kawaii.log` file is created in the project root with debug-level logs
+- Pass `--verbose` or `-v` for verbose console output
+
+## Running Tests
+
+```bash
+python -m pytest tests/ -v
+# Or individually:
+python tests/test_extract_user_info.py
+python tests/test_llm.py
+```
 
 ## License
 
