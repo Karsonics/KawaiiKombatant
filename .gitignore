@@ -42,10 +42,14 @@ configs/database_config.yaml
 configs/api_config.yaml
 *.env
 
-# API keys
+# API keys & tokens
 api_key.txt
 *.key
 credentials.json
+token
+code.py
+*discord*
+*bot_token*
 
 # Logs
 *.log

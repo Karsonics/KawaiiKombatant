@@ -212,3 +212,10 @@
     [x] bot_main.py — --voice flag added
     [x] Updated requirements.txt (whisper, pynput, silero-vad)
     [x] Updated README.md with voice docs
+[x] SECURITY: GitHub secret leak remediation
+    [x] Scrubbed code.py and token from all git history (git-filter-repo)
+    [x] Also scrubbed configs/database_config.yaml (MySQL creds)
+    [x] Pre-commit hook installed (.git/hooks/pre-commit — blocks tokens/secrets)
+    [x] .gitignore updated (added token, code.py, *discord*, *bot_token*)
+    [ ] PENDING: Revoke Discord token in Discord Developer Portal
+    [ ] PENDING: gh auth login + git push origin --force --all
