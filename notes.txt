@@ -1,7 +1,214 @@
-TODO:
-- docker-compose for ollama + gptsovits + mysql
-- wire up ASR (speech recognition)
-- replace regex entity extraction with LLM-based extraction
-- add web UI (gradio or fastapi)
-- batch database writes instead of per-message
-- conversation summarization for long contexts
+╔══════════════════════════════════════════════════════════╗
+║              KAWAIKOMBATANT MASTER TODO LIST              ║
+╚══════════════════════════════════════════════════════════╝
+
+────────────────────────────────────────────────────────────
+  IMMEDIATE (no GPU / network needed)
+────────────────────────────────────────────────────────────
+
+[ ] Wire up Faster-Whisper or openai-whisper for ASR
+    - server/process/asr_func/asr_push_to_talk.py is still empty
+    - Use openai-whisper via PyTorch ROCm (Faster-Whisper is CUDA-only)
+    - whisper.cpp + Vulkan is another option on AMD
+    - Add push-to-talk keybinding (spacebar to record)
+
+[ ] Replace regex entity extraction with LLM-based extraction
+    - bot_main.py extract_user_info() is fragile regex
+    - Send a small prompt to Ollama to extract structured data
+    - More robust, catches natural language variations
+    - Could batch extractions instead of per-message
+
+[ ] Batch database writes
+    - Currently saves memory to MySQL on EVERY extraction
+    - Accumulate changes, flush every N seconds or M changes
+    - Reduces DB load significantly
+
+[ ] Conversation summarization
+    - When context exceeds N messages, summarize old ones
+    - Inject summary as a system message instead of raw history
+    - Lets you keep far more context without overflowing the window
+
+[ ] Add multi-user support
+    - user_id is hardcoded to "default_user"
+    - Add --user flag to bot_main.py
+    - Let session manager operate per-user
+    - Add user switching mid-session
+
+[ ] Add a --dry-run flag to bot_main.py
+    - Runs without Ollama/DB, tests config loading and regex extraction
+    - Useful for quick iteration on regex patterns
+
+[ ] Add a --voice flag for selecting TTS voice at startup
+    - Currently reads from sovits_config.yaml only
+
+────────────────────────────────────────────────────────────
+  MEDIUM TERM (needs testing environment)
+────────────────────────────────────────────────────────────
+
+[ ] Web UI
+    - Gradio or FastAPI + HTMX frontend
+    - Real-time streaming of LLM responses
+    - Voice recording via browser mic
+    - Session browser + memory viewer
+    - Character personality switcher from the UI
+
+[ ] Docker Compose setup
+    - ollama service (with ROCm device passthrough)
+    - gptsovits service (GPT-SoVITS-AMD fork)
+    - mysql service
+    - bot service
+    - One docker-compose up to start everything
+
+[ ] Pluggable TTS backends
+    - Abstract TTS behind an interface
+    - Current: GPT-SoVITS
+    - Want: Fish Speech, Piper, Coqui TTS, Edge TTS
+    - Config-driven backend selection
+
+[ ] Pluggable LLM backends
+    - Abstract behind an interface
+    - Current: OpenAI-compatible (Ollama)
+    - Want: direct llama.cpp binding, vLLM, Anthropic, OpenAI
+
+[ ] semantic memory / RAG pipeline
+    - Vector store (ChromaDB, FAISS) for semantic recall
+    - Instead of loading N raw messages, query relevant memories
+    - Much more scalable for long-running conversations
+
+[ ] End-to-end benchmark automation
+    - tests/test_full_pipeline.py has stubs only
+    - Wire up: ASR -> LLM -> TTS timing
+    - Latency breakdown per component
+    - Export to CSV/JSON like the TTS benchmarks
+
+[ ] Character mood persistence
+    - Currently the dynamic mood resets to neutral on new session
+    - Store mood across sessions in user_preferences
+    - Character "remembers" how the last conversation ended
+
+────────────────────────────────────────────────────────────
+  ARCH / AMD GPU SPECIFIC
+────────────────────────────────────────────────────────────
+
+[ ] Verify ROCm is actually being used
+    - Add `rocm-smi` check at startup
+    - Print GPU model, VRAM, ROCm version
+    - Compare inference speed with/without GPU
+
+[ ] GPU test improvements (tests/test_gpu.py)
+    - Add `torch.version.hip` check
+    - Add ROCm memory info
+    - Test actual GPU inference, not just availability
+
+[ ] Systemd user services
+    - ollama.service (already exists with pacman)
+    - mysql.service (already exists)
+    - gptsovits.service (needs custom .service file)
+    - Start all three with one command
+
+[ ] Ollama performance tuning
+    - Set OLLAMA_NUM_GPU=999 in systemd override
+    - Set HSA_OVERRIDE_GFX_VERSION for your GPU
+    - Verify offloading with `ollama ps`
+    - Compare Q4_K_M vs Q8_0 vs FP16 for your VRAM
+
+[ ] GPT-SoVITS server as a systemd service
+    - Write /etc/systemd/system/gptsovits.service
+    - Include ROCm env vars
+    - Auto-restart on crash
+
+[ ] Audio output device selection
+    - sounddevice uses default device (might be HDMI audio)
+    - Add device selection to sovits_config.yaml
+    - List available devices with python -m sounddevice
+
+────────────────────────────────────────────────────────────
+  CODE QUALITY & INFRASTRUCTURE
+────────────────────────────────────────────────────────────
+
+[ ] pre-commit hooks
+    - Black formatter
+    - Ruff linter
+    - mypy type checker
+    - pytest for tests
+
+[ ] GitHub CI
+    - .github/workflows/ci.yml
+    - Run lint + typecheck + tests on push
+    - Test on multiple Python versions (3.10, 3.11, 3.12)
+
+[ ] Add Makefile
+    - make run (starts the bot)
+    - make test (runs all tests)
+    - make lint (ruff check)
+    - make typecheck (mypy)
+    - make clean (removes __pycache__, logs, etc.)
+
+[ ] Pydantic config models
+    - Replace raw yaml.safe_load() with Pydantic models
+    - Automatic validation + IDE autocomplete
+    - One model per config file
+
+[ ] structured logging improvements
+    - Add log rotation (currently grows unbounded)
+    - Add JSON log format option (for log aggregation)
+    - Add request IDs per user message for tracing
+
+────────────────────────────────────────────────────────────
+  NICE TO HAVE
+────────────────────────────────────────────────────────────
+
+[ ] Emotional TTS
+    - Pass mood from compute_character_state to TTS
+    - Some TTS backends support emotion tags
+    - Kuro sounds sad when mood is "annoyed"
+
+[ ] Custom wake word
+    - Porcupine or openWakeWord
+    - Bot listens for "Hey Kuro" to start recording
+    - Full hands-free mode
+
+[ ] Telegram / Discord bot
+    - Wrap the chat loop in a bot framework
+    - Same Kuro character, but accessible from phone
+    - Persistent per-user sessions
+
+[ ] Voice activity detection (VAD)
+    - Silero VAD or WebRTC VAD
+    - Auto-detect when user stops speaking
+    - No push-to-talk needed
+
+[ ] Export conversation as PDF / HTML
+    - Pretty formatted chat log
+    - Timestamps, character name, avatar
+    - Good for sharing conversations
+
+────────────────────────────────────────────────────────────
+  COMPLETED
+────────────────────────────────────────────────────────────
+
+[x] Delete old_files/ directory
+[x] Fix hardcoded audio path in sovits_config.yaml
+[x] Replace print() with logging everywhere
+[x] Add retry decorator to API calls
+[x] Type hints across all modules
+[x] Config validation at startup
+[x] Unit tests for extract_user_info() regex
+[x] Dynamic character state based on sentiment
+[x] Session import functionality
+[x] README overhaul with quickstart + troubleshooting
+[x] notes.txt converted to proper todo list
+[x] Phase 0: Server architecture refactor
+    [x] KuroEngine class (server/kuro_engine.py)
+    [x] FastAPI + WebSocket server (server/kuro_api.py)
+    [x] bot_main.py → thin WS client with --direct fallback
+    [x] Updated requirements.txt (fastapi, uvicorn, websockets)
+    [x] Updated README.md with server docs + WS protocol
+[x] Phase 1: Voice pipeline
+    [x] voice/mic.py — MicRecorder (sounddevice-based audio capture)
+    [x] voice/vad.py — VoiceActivityDetector (Silero VAD with energy fallback)
+    [x] voice/asr.py — WhisperTranscriber (openai-whisper, lazy-loaded)
+    [x] voice/voice_client.py — Push-to-talk orchestrator + WS integration
+    [x] bot_main.py — --voice flag added
+    [x] Updated requirements.txt (whisper, pynput, silero-vad)
+    [x] Updated README.md with voice docs

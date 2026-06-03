@@ -16,8 +16,15 @@ numpy>=1.24.0
 # LLM/Ollama
 requests>=2.28.0
 
-# Optional: for async audio
-# already included via stdlib
+# WebSocket server
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+websockets>=12.0
+
+# Voice pipeline
+openai-whisper>=20231117
+pynput>=1.7.0
+silero-vad>=4.0.0
 
 # Development
 pytest>=7.0.0

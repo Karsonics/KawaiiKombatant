@@ -11,8 +11,13 @@ pip install -r requirements.txt
 
 # 2. Make sure MySQL, Ollama, and GPT-SoVITS API are running
 
-# 3. Run the bot
+# 3. Run the bot (standalone mode)
 python bot_main.py
+
+# Or run as a WebSocket server (for multi-client setups)
+python -m server.kuro_api
+# Then connect with the CLI client:
+python bot_main.py --ws
 ```
 
 ## Requirements
@@ -79,6 +84,68 @@ While the bot is running:
 - `memory` — Display stored user memories
 - `clear_memory` — Clear all stored user data
 
+## Server Mode
+
+Run the Kuro Engine as a WebSocket server that multiple clients can connect to:
+
+```bash
+# Start the server (default port: 8765)
+python -m server.kuro_api
+
+# With custom port
+python -m server.kuro_api --port 9000
+
+# Connect the CLI client
+python bot_main.py --ws
+python bot_main.py --ws --port 9000
+```
+
+### WebSocket Protocol
+
+Clients send JSON messages to `ws://host:8765/ws`:
+
+| Type | Direction | Example |
+|------|-----------|---------|
+| `message` | Client → Server | `{"type": "message", "data": "hello", "session_id": null}` |
+| `command` | Client → Server | `{"type": "command", "command": "memory"}` |
+| `done` | Server → Client | `{"type": "done", "data": {"text": "Hi!", "mood": "happy", "emotion": 0.7, "session_id": "..."}}` |
+| `error` | Server → Client | `{"type": "error", "data": "Ollama unreachable"}` |
+| `command_result` | Server → Client | `{"type": "command_result", "command": "history", "data": "..."}` |
+
+Available commands: `history`, `memory`, `clear_memory`, `new_session`, `sessions`
+
+## Voice Pipeline
+
+Hold the spacebar to talk to Kuro hands-free:
+
+```bash
+# Start the server first
+python -m server.kuro_api
+
+# Voice client (push-to-talk, spacebar to record)
+python bot_main.py --voice
+
+# With options
+python bot_main.py --voice --model tiny          # faster, less accurate
+python bot_main.py --voice --model medium        # slower, more accurate
+python bot_main.py --voice --host 192.168.1.5    # remote server
+```
+
+If `pynput` is not available (e.g., Wayland), the client falls back to CLI mode:
+press Enter to start recording, Enter again to stop.
+
+The voice pipeline runs entirely on your machine:
+```
+Mic → VAD (Silero, CPU) → ASR (Whisper, GPU) → text → KuroAPI → LLM → TTS
+```
+
+### Standalone voice client
+
+```bash
+python -m voice.voice_client --help
+python -m voice.voice_client --model tiny
+```
+
 ## Session Manager
 
 The session manager utility lets you list, view, export, import, and clear sessions:
@@ -107,20 +174,24 @@ python -m utils.session_manager clear -s <session-id>
 
 ```
 KawaiiKombatant/
-├── bot_main.py                  # Main entry point
+├── bot_main.py                  # CLI frontend (direct or --ws mode)
 ├── configs/                     # YAML configuration files
 │   ├── bot_config.yaml
 │   ├── sovits_config.yaml
 │   ├── database_config.yaml
 │   ├── character_config.yaml
 │   └── presets/
-├── server/process/
-│   ├── storage/                 # Database & memory
-│   │   ├── mysql_storage.py
-│   │   └── user_memory.py
-│   ├── tts_func/               # TTS client (GPT-SoVITS)
-│   │   └── sovits_amd.py
-│   └── asr_func/               # Speech recognition (stub)
+├── server/
+│   ├── __init__.py
+│   ├── kuro_engine.py           # Core engine (LLM, memory, TTS)
+│   ├── kuro_api.py              # FastAPI + WebSocket server
+│   └── process/
+│       ├── storage/             # Database & memory
+│       │   ├── mysql_storage.py
+│       │   └── user_memory.py
+│       ├── tts_func/            # TTS client (GPT-SoVITS)
+│       │   └── sovits_amd.py
+│       └── asr_func/            # Speech recognition (stub)
 ├── utils/                       # Utilities
 │   ├── __init__.py
 │   ├── logging.py              # Structured logging
