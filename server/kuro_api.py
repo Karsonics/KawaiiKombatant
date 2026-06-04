@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import os
 import sys
@@ -9,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from server.kuro_engine import KuroEngine
+from server.process.asr_func.asr_push_to_talk import transcribe_bytes as asr_transcribe
 from utils.logging import logger
 
 engine = KuroEngine()
@@ -71,6 +73,48 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 try:
                     result = await loop.run_in_executor(
                         None, engine.process_message, user_input, session_id
+                    )
+                    session_id = result["session_id"]
+                    await ws.send_json({"type": "done", "data": result})
+                    await _broadcast_mood(result["mood"], result.get("emotion", 0.5))
+                except Exception as e:
+                    logger.error("process_message error: %s", e)
+                    await ws.send_json({"type": "error", "data": str(e)})
+
+            elif msg_type == "audio":
+                audio_b64 = msg.get("data", "")
+                sample_rate = msg.get("sample_rate", 16000)
+                language = msg.get("language", None)
+
+                if not session_id:
+                    session_id = msg.get("session_id") or engine.create_session()
+
+                if not audio_b64:
+                    await ws.send_json({"type": "error", "data": "No audio data provided"})
+                    continue
+
+                try:
+                    audio_bytes = base64.b64decode(audio_b64)
+                except Exception:
+                    await ws.send_json({"type": "error", "data": "Invalid base64 audio data"})
+                    continue
+
+                loop = asyncio.get_running_loop()
+                try:
+                    text = await loop.run_in_executor(
+                        None, asr_transcribe, audio_bytes, sample_rate, language
+                    )
+                except RuntimeError as e:
+                    await ws.send_json({"type": "error", "data": f"ASR error: {e}"})
+                    continue
+
+                if not text:
+                    await ws.send_json({"type": "error", "data": "No speech detected"})
+                    continue
+
+                try:
+                    result = await loop.run_in_executor(
+                        None, engine.process_message, text, session_id
                     )
                     session_id = result["session_id"]
                     await ws.send_json({"type": "done", "data": result})

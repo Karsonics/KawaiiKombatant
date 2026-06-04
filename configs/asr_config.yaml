@@ -1,0 +1,13 @@
+# ASR (Speech Recognition) Configuration
+
+model:
+  # Model size: tiny, base, small, medium, large
+  size: "base"
+  # Device override: null for auto, or "cpu", "cuda", "hip"
+  device: null
+  # Default language for transcription
+  language: "en"
+
+audio:
+  sample_rate: 16000
+  channels: 1
