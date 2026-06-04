@@ -2,7 +2,6 @@
 import argparse
 import asyncio
 import json
-import sys
 import time
 from typing import Optional
 
@@ -14,8 +13,12 @@ from utils.logging import logger
 
 
 class AvatarClient:
-    def __init__(self, config_path: str = "configs/vtube_config.yaml",
-                 host: str | None = None, port: int | None = None) -> None:
+    def __init__(
+        self,
+        config_path: str = "configs/vtube_config.yaml",
+        host: str | None = None,
+        port: int | None = None,
+    ) -> None:
         self.config = MoodConfig(config_path)
         if host is not None:
             self.config._raw["kuro_api"]["host"] = host
@@ -95,8 +98,12 @@ class AvatarClient:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kuro Avatar Client")
-    parser.add_argument("--config", default="configs/vtube_config.yaml", help="Config file path")
-    parser.add_argument("--list-models", action="store_true", help="List available VTS models and exit")
+    parser.add_argument(
+        "--config", default="configs/vtube_config.yaml", help="Config file path"
+    )
+    parser.add_argument(
+        "--list-models", action="store_true", help="List available VTS models and exit"
+    )
     args = parser.parse_args()
 
     if args.list_models:

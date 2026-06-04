@@ -4,12 +4,20 @@ import re
 CHARACTER_PATTERNS = [
     re.compile(r"i (?:really )?like (\w+) from (.+?)(?:\.|$|,)", re.IGNORECASE),
     re.compile(r"i love (\w+) from (.+?)(?:\.|$|,)", re.IGNORECASE),
-    re.compile(r"(\w+) from (.+?) is (?:my favorite|great|amazing|the best)", re.IGNORECASE),
-    re.compile(r"favorite (?:character|person) is (\w+)(?: from (.+?))?(?:\.|$|,)", re.IGNORECASE),
+    re.compile(
+        r"(\w+) from (.+?) is (?:my favorite|great|amazing|the best)", re.IGNORECASE
+    ),
+    re.compile(
+        r"favorite (?:character|person) is (\w+)(?: from (.+?))?(?:\.|$|,)",
+        re.IGNORECASE,
+    ),
 ]
 
 MEDIA_PATTERNS = [
-    re.compile(r"(?:watching|reading|love|like) (.+?)(?:anime|manga|series|show)", re.IGNORECASE),
+    re.compile(
+        r"(?:watching|reading|love|like) (.+?)(?:anime|manga|series|show)",
+        re.IGNORECASE,
+    ),
     re.compile(r"have you (?:seen|read|watched) (.+?)\?", re.IGNORECASE),
 ]
 
@@ -66,7 +74,9 @@ class TestCharacterPatterns(unittest.TestCase):
         self.assertEqual(match.group(2), "Pokemon")
 
     def test_favorite_character_is(self):
-        match = CHARACTER_PATTERNS[3].search("my favorite character is Goku from Dragon Ball")
+        match = CHARACTER_PATTERNS[3].search(
+            "my favorite character is Goku from Dragon Ball"
+        )
         self.assertIsNotNone(match)
         self.assertEqual(match.group(1).capitalize(), "Goku")
 
@@ -136,14 +146,24 @@ class TestHobbyPatterns(unittest.TestCase):
 
 class TestEdgeCases(unittest.TestCase):
     def test_empty_string(self):
-        for patterns in [NAME_PATTERNS, CHARACTER_PATTERNS, MEDIA_PATTERNS,
-                         FAVORITE_PATTERNS, HOBBY_PATTERNS]:
+        for patterns in [
+            NAME_PATTERNS,
+            CHARACTER_PATTERNS,
+            MEDIA_PATTERNS,
+            FAVORITE_PATTERNS,
+            HOBBY_PATTERNS,
+        ]:
             for pattern in patterns:
                 self.assertIsNone(pattern.search(""))
 
     def test_whitespace_only(self):
-        for patterns in [NAME_PATTERNS, CHARACTER_PATTERNS, MEDIA_PATTERNS,
-                         FAVORITE_PATTERNS, HOBBY_PATTERNS]:
+        for patterns in [
+            NAME_PATTERNS,
+            CHARACTER_PATTERNS,
+            MEDIA_PATTERNS,
+            FAVORITE_PATTERNS,
+            HOBBY_PATTERNS,
+        ]:
             for pattern in patterns:
                 self.assertIsNone(pattern.search("   "))
 

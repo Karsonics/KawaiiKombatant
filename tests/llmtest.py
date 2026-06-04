@@ -1,5 +1,4 @@
 import requests
-import json
 
 # ── Config ──────────────────────────────────────────────
 OLLAMA_URL = "http://localhost:11434"
@@ -40,7 +39,7 @@ def main():
         print("✗ Could not connect to Ollama. Is it running? (ollama serve)")
         return
 
-    print(f"✓ Ollama is running")
+    print("✓ Ollama is running")
     print(f"  Available models: {', '.join(models)}")
 
     if MODEL_NAME not in models:

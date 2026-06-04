@@ -17,11 +17,16 @@ class WhisperTranscriber:
             return
         try:
             import whisper
+
             self._model = whisper.load_model(
                 self.model_size,
                 device=self._device,
             )
-            logger.info("Whisper model '%s' loaded (device: %s)", self.model_size, self._device or "auto")
+            logger.info(
+                "Whisper model '%s' loaded (device: %s)",
+                self.model_size,
+                self._device or "auto",
+            )
         except ImportError:
             raise RuntimeError(
                 "openai-whisper not installed. Install with: pip install openai-whisper"

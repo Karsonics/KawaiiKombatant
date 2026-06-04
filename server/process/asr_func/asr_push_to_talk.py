@@ -5,17 +5,17 @@ from typing import Optional
 
 from utils.logging import logger
 
-
 _TRANSCRIBER = None
 
 
 def _load_config():
     config_path = os.path.join(
-        os.path.dirname(__file__),
-        "..", "..", "..", "configs", "asr_config.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "configs", "asr_config.yaml"
     )
-    cfg = {"model": {"size": "base", "device": None, "language": "en"},
-           "audio": {"sample_rate": 16000, "channels": 1}}
+    cfg = {
+        "model": {"size": "base", "device": None, "language": "en"},
+        "audio": {"sample_rate": 16000, "channels": 1},
+    }
     if os.path.exists(config_path):
         with open(config_path) as f:
             loaded = yaml.safe_load(f) or {}
@@ -37,12 +37,16 @@ def _get_transcriber():
         return _TRANSCRIBER
     try:
         from voice.asr import WhisperTranscriber
+
         _TRANSCRIBER = WhisperTranscriber(
             model_size=CONFIG["model"]["size"],
             device=CONFIG["model"]["device"],
         )
-        logger.info("Server ASR initialized (model: %s, device: %s)",
-                     CONFIG["model"]["size"], CONFIG["model"]["device"] or "auto")
+        logger.info(
+            "Server ASR initialized (model: %s, device: %s)",
+            CONFIG["model"]["size"],
+            CONFIG["model"]["device"] or "auto",
+        )
         return _TRANSCRIBER
     except Exception as e:
         logger.error("Failed to initialize ASR: %s", e)
@@ -75,9 +79,8 @@ def transcribe_bytes(
     if samplerate != 16000:
         try:
             import librosa
-            audio = librosa.resample(
-                audio, orig_sr=samplerate, target_sr=16000
-            )
+
+            audio = librosa.resample(audio, orig_sr=samplerate, target_sr=16000)
         except ImportError:
             logger.warning("librosa not available — assuming 16kHz input")
     return transcribe(audio, language=language)

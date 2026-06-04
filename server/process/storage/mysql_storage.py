@@ -1,7 +1,5 @@
-import mysql.connector
 from mysql.connector import Error, pooling
-from datetime import datetime
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 import yaml
 import json
 
@@ -17,23 +15,23 @@ class MySQLConversationStorage:
         self._initialize_database()
 
     def _load_config(self, config_path: str) -> dict:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             return yaml.safe_load(f)
 
     def _create_connection_pool(self) -> None:
         try:
-            mysql_config = self.config['mysql']
-            connection_config = self.config['connection']
+            mysql_config = self.config["mysql"]
+            connection_config = self.config["connection"]
 
             self.connection_pool = pooling.MySQLConnectionPool(
                 pool_name="kawaii_pool",
-                pool_size=connection_config['max_connections'],
+                pool_size=connection_config["max_connections"],
                 pool_reset_session=True,
-                host=mysql_config['host'],
-                port=mysql_config['port'],
-                database=mysql_config['database'],
-                user=mysql_config['username'],
-                password=mysql_config['password']
+                host=mysql_config["host"],
+                port=mysql_config["port"],
+                database=mysql_config["database"],
+                user=mysql_config["username"],
+                password=mysql_config["password"],
             )
             logger.info("MySQL connection pool created successfully")
         except Error as e:
@@ -106,14 +104,16 @@ class MySQLConversationStorage:
                 connection.close()
 
     @retry(max_attempts=3, delay=2, backoff=2)
-    def add_message(self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None) -> int:
+    def add_message(
+        self, session_id: str, role: str, content: str, metadata: Optional[Dict] = None
+    ) -> int:
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor()
 
-            table_name = self.config['tables']['conversations']
+            table_name = self.config["tables"]["conversations"]
             metadata_json = json.dumps(metadata) if metadata else None
 
             query = f"""
@@ -136,14 +136,16 @@ class MySQLConversationStorage:
             if connection:
                 connection.close()
 
-    def get_conversation_history(self, session_id: str, limit: Optional[int] = None) -> List[Dict]:
+    def get_conversation_history(
+        self, session_id: str, limit: Optional[int] = None
+    ) -> List[Dict]:
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor(dictionary=True)
 
-            table_name = self.config['tables']['conversations']
+            table_name = self.config["tables"]["conversations"]
 
             if limit:
                 query = f"""
@@ -166,11 +168,11 @@ class MySQLConversationStorage:
             results = cursor.fetchall()
 
             for result in results:
-                if result['metadata']:
+                if result["metadata"]:
                     try:
-                        result['metadata'] = json.loads(result['metadata'])
+                        result["metadata"] = json.loads(result["metadata"])
                     except (json.JSONDecodeError, TypeError):
-                        result['metadata'] = None
+                        result["metadata"] = None
 
             if limit:
                 results.reverse()
@@ -186,17 +188,21 @@ class MySQLConversationStorage:
             if connection:
                 connection.close()
 
-    def get_recent_context(self, session_id: str, context_length: int = 10) -> List[Dict]:
+    def get_recent_context(
+        self, session_id: str, context_length: int = 10
+    ) -> List[Dict]:
         return self.get_conversation_history(session_id, limit=context_length)
 
-    def update_character_state(self, session_id: str, mood: str, emotion_level: float, context_summary: str) -> None:
+    def update_character_state(
+        self, session_id: str, mood: str, emotion_level: float, context_summary: str
+    ) -> None:
         connection = None
         cursor = None
         try:
             connection = self._get_connection()
             cursor = connection.cursor()
 
-            table_name = self.config['tables']['character_states']
+            table_name = self.config["tables"]["character_states"]
 
             query = f"""
             INSERT INTO {table_name} (session_id, mood, emotion_level, context_summary)
@@ -228,7 +234,7 @@ class MySQLConversationStorage:
             connection = self._get_connection()
             cursor = connection.cursor(dictionary=True)
 
-            table_name = self.config['tables']['character_states']
+            table_name = self.config["tables"]["character_states"]
 
             query = f"""
             SELECT mood, emotion_level, context_summary, last_updated
@@ -255,8 +261,14 @@ class MySQLConversationStorage:
             connection = self._get_connection()
             cursor = connection.cursor()
 
-            cursor.execute(f"DELETE FROM {self.config['tables']['conversations']} WHERE session_id = %s", (session_id,))
-            cursor.execute(f"DELETE FROM {self.config['tables']['character_states']} WHERE session_id = %s", (session_id,))
+            cursor.execute(
+                f"DELETE FROM {self.config['tables']['conversations']} WHERE session_id = %s",
+                (session_id,),
+            )
+            cursor.execute(
+                f"DELETE FROM {self.config['tables']['character_states']} WHERE session_id = %s",
+                (session_id,),
+            )
 
             connection.commit()
             logger.info("Session %s cleared successfully", session_id)
@@ -279,7 +291,7 @@ class MySQLConversationStorage:
             connection = self._get_connection()
             cursor = connection.cursor()
 
-            table_name = self.config['tables']['conversations']
+            table_name = self.config["tables"]["conversations"]
             query = f"SELECT DISTINCT session_id FROM {table_name}"
             cursor.execute(query)
 
@@ -288,6 +300,26 @@ class MySQLConversationStorage:
         except Error as e:
             logger.error("Error retrieving sessions: %s", e)
             raise
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def get_message_count(self, session_id: str) -> int:
+        connection = None
+        cursor = None
+        try:
+            connection = self._get_connection()
+            cursor = connection.cursor()
+            table_name = self.config["tables"]["conversations"]
+            query = f"SELECT COUNT(*) FROM {table_name} WHERE session_id = %s"
+            cursor.execute(query, (session_id,))
+            row = cursor.fetchone()
+            return row[0] if row else 0
+        except Exception as e:
+            logger.error("Error counting messages: %s", e)
+            return 0
         finally:
             if cursor:
                 cursor.close()

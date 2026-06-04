@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
 import json
-import sys
 import threading
 from typing import Optional
 
@@ -10,9 +9,9 @@ from voice.vad import VoiceActivityDetector
 from voice.asr import WhisperTranscriber
 from utils.logging import logger
 
-
 try:
     from pynput import keyboard
+
     HAS_PYNPUT = True
 except ImportError:
     HAS_PYNPUT = False
@@ -39,6 +38,7 @@ class VoiceClient:
         self._loop = asyncio.get_running_loop()
 
         import websockets
+
         logger.info("Connecting to KuroAPI at %s", self.ws_url)
         async with websockets.connect(self.ws_url) as ws:
             receiver_task = asyncio.create_task(self._receiver(ws))
@@ -54,6 +54,7 @@ class VoiceClient:
 
     async def _receiver(self, ws) -> None:
         import websockets
+
         try:
             async for raw in ws:
                 resp = json.loads(raw)
@@ -167,20 +168,29 @@ class VoiceClient:
 
         print(f"You: {text}", flush=True)
 
-        await self._send_queue.put({
-            "type": "message",
-            "data": text,
-            "session_id": self._session_id,
-        })
+        await self._send_queue.put(
+            {
+                "type": "message",
+                "data": text,
+                "session_id": self._session_id,
+            }
+        )
 
 
 def main() -> None:
     import argparse
+
     parser = argparse.ArgumentParser(description="Kuro Voice Client")
     parser.add_argument("--host", default="localhost", help="KuroAPI host")
     parser.add_argument("--port", type=int, default=8765, help="KuroAPI port")
-    parser.add_argument("--model", default="base", help="Whisper model size (tiny/base/small/medium/large)")
-    parser.add_argument("--vad-threshold", type=float, default=0.5, help="VAD sensitivity (0-1)")
+    parser.add_argument(
+        "--model",
+        default="base",
+        help="Whisper model size (tiny/base/small/medium/large)",
+    )
+    parser.add_argument(
+        "--vad-threshold", type=float, default=0.5, help="VAD sensitivity (0-1)"
+    )
     args = parser.parse_args()
 
     client = VoiceClient(

@@ -4,28 +4,38 @@ import uuid
 import os
 import threading
 from datetime import datetime
-from typing import Optional
 
 import yaml
 from openai import OpenAI
 
 from server.process.storage.mysql_storage import MySQLConversationStorage
 from server.process.storage.user_memory import UserMemory
-from server.process.tts_func.sovits_amd import speak, check_api_available, set_voice as tts_set_voice
+from server.process.tts_func.sovits_amd import (
+    speak,
+    check_api_available,
+    set_voice as tts_set_voice,
+)
 from utils.logging import logger
-
 
 _CONTEXT_PATTERN = re.compile(r"from (.+?)(?:\.|$|,)", re.IGNORECASE)
 
 _CHARACTER_PATTERNS = [
     re.compile(r"i (?:really )?like (\w+) from (.+?)(?:\.|$|,)", re.IGNORECASE),
     re.compile(r"i love (\w+) from (.+?)(?:\.|$|,)", re.IGNORECASE),
-    re.compile(r"(\w+) from (.+?) is (?:my favorite|great|amazing|the best)", re.IGNORECASE),
-    re.compile(r"favorite (?:character|person) is (\w+)(?: from (.+?))?(?:\.|$|,)", re.IGNORECASE),
+    re.compile(
+        r"(\w+) from (.+?) is (?:my favorite|great|amazing|the best)", re.IGNORECASE
+    ),
+    re.compile(
+        r"favorite (?:character|person) is (\w+)(?: from (.+?))?(?:\.|$|,)",
+        re.IGNORECASE,
+    ),
 ]
 
 _MEDIA_PATTERNS = [
-    re.compile(r"(?:watching|reading|love|like) (.+?)(?:anime|manga|series|show)", re.IGNORECASE),
+    re.compile(
+        r"(?:watching|reading|love|like) (.+?)(?:anime|manga|series|show)",
+        re.IGNORECASE,
+    ),
     re.compile(r"have you (?:seen|read|watched) (.+?)\?", re.IGNORECASE),
 ]
 
@@ -95,11 +105,17 @@ def _validate_configs(config: dict) -> tuple[list, list]:
         llm = config["llm"]
         provider = llm.get("provider", "ollama")
         if provider not in _PROVIDER_DEFAULTS:
-            errors.append(f"bot_config.yaml: llm.provider '{provider}' unknown (use: {', '.join(_PROVIDER_DEFAULTS)})")
+            errors.append(
+                f"bot_config.yaml: llm.provider '{provider}' unknown (use: {', '.join(_PROVIDER_DEFAULTS)})"
+            )
         if provider == "custom" and not llm.get("base_url"):
-            errors.append("bot_config.yaml: llm.base_url is required for provider 'custom'")
+            errors.append(
+                "bot_config.yaml: llm.base_url is required for provider 'custom'"
+            )
         if provider in ("openai", "openrouter") and not llm.get("api_key"):
-            errors.append(f"bot_config.yaml: llm.api_key is required for provider '{provider}'")
+            errors.append(
+                f"bot_config.yaml: llm.api_key is required for provider '{provider}'"
+            )
         if not llm.get("model"):
             errors.append("bot_config.yaml: llm.model is required")
     else:
@@ -128,7 +144,9 @@ def _validate_configs(config: dict) -> tuple[list, list]:
             else:
                 for field in ["host", "database", "username"]:
                     if field not in db_cfg.get("mysql", {}):
-                        errors.append(f"database_config.yaml: mysql.{field} is required")
+                        errors.append(
+                            f"database_config.yaml: mysql.{field} is required"
+                        )
 
     tts_config_path = os.path.join(
         os.path.dirname(__file__), "..", "configs", "sovits_config.yaml"
@@ -143,20 +161,40 @@ def _validate_configs(config: dict) -> tuple[list, list]:
 
 
 class _NullStorage:
-    def add_message(self, *args, **kwargs): return 0
-    def get_recent_context(self, *args, **kwargs): return []
-    def get_conversation_history(self, *args, **kwargs): return []
-    def get_all_sessions(self, *args, **kwargs): return []
-    def update_character_state(self, *args, **kwargs): pass
-    def get_character_state(self, *args, **kwargs): return None
-    def close(self): pass
+    def add_message(self, *args, **kwargs):
+        return 0
+
+    def get_recent_context(self, *args, **kwargs):
+        return []
+
+    def get_conversation_history(self, *args, **kwargs):
+        return []
+
+    def get_all_sessions(self, *args, **kwargs):
+        return []
+
+    def update_character_state(self, *args, **kwargs):
+        pass
+
+    def get_character_state(self, *args, **kwargs):
+        return None
+
+    def close(self):
+        pass
 
 
 class KuroEngine:
-    def __init__(self, config_path: str = "configs/bot_config.yaml", dry_run: bool = False, voice_override: str | None = None) -> None:
-        config_path = os.path.join(
-            os.path.dirname(__file__), "..", config_path
-        ) if not os.path.isabs(config_path) else config_path
+    def __init__(
+        self,
+        config_path: str = "configs/bot_config.yaml",
+        dry_run: bool = False,
+        voice_override: str | None = None,
+    ) -> None:
+        config_path = (
+            os.path.join(os.path.dirname(__file__), "..", config_path)
+            if not os.path.isabs(config_path)
+            else config_path
+        )
 
         with open(config_path) as f:
             self.config = yaml.safe_load(f)
@@ -183,7 +221,10 @@ class KuroEngine:
             self.client = None
             self.extraction_client = None
             self.storage = _NullStorage()
-            self.user_memory = UserMemory(self.storage, user_id=self.config.get("chat", {}).get("user_id", "default_user"))
+            self.user_memory = UserMemory(
+                self.storage,
+                user_id=self.config.get("chat", {}).get("user_id", "default_user"),
+            )
             self.db_available = False
             self.tts_enabled = False
         else:
@@ -205,12 +246,20 @@ class KuroEngine:
             )
             try:
                 self.storage = MySQLConversationStorage(db_config_path)
-                self.user_memory = UserMemory(self.storage, user_id=self.config.get("chat", {}).get("user_id", "default_user"))
+                self.user_memory = UserMemory(
+                    self.storage,
+                    user_id=self.config.get("chat", {}).get("user_id", "default_user"),
+                )
                 self.db_available = True
             except Exception as e:
-                logger.warning("Database unavailable (%s) — running without persistence", e)
+                logger.warning(
+                    "Database unavailable (%s) — running without persistence", e
+                )
                 self.storage = _NullStorage()
-                self.user_memory = UserMemory(self.storage, user_id=self.config.get("chat", {}).get("user_id", "default_user"))
+                self.user_memory = UserMemory(
+                    self.storage,
+                    user_id=self.config.get("chat", {}).get("user_id", "default_user"),
+                )
                 self.db_available = False
 
             if self.config.get("tts", {}).get("enabled", True):
@@ -220,7 +269,9 @@ class KuroEngine:
 
         self.context_length = self.config.get("chat", {}).get("context_length", 15)
         self.character_name = self.config.get("character", {}).get("name", "Kuro")
-        self.base_system_prompt = self.config.get("character", {}).get("system_prompt", "")
+        self.base_system_prompt = self.config.get("character", {}).get(
+            "system_prompt", ""
+        )
         self.user_id = self.config.get("chat", {}).get("user_id", "default_user")
 
         self._tts_lock = threading.Lock()
@@ -228,7 +279,11 @@ class KuroEngine:
         if voice_override and not dry_run:
             tts_set_voice(voice_override)
 
-        logger.info("KuroEngine initialized (dry_run=%s, TTS: %s)", dry_run, getattr(self, "tts_enabled", False))
+        logger.info(
+            "KuroEngine initialized (dry_run=%s, TTS: %s)",
+            dry_run,
+            getattr(self, "tts_enabled", False),
+        )
 
     # ------------------------------------------------------------------ #
     #  Session management                                                 #
@@ -249,8 +304,8 @@ class KuroEngine:
         )
         self.storage.update_character_state(
             session_id=session_id,
-            mood="neutral",
-            emotion_level=0.5,
+            mood=self.user_memory.get_mood(),
+            emotion_level=self.user_memory.get_emotion(),
             context_summary="New session",
         )
         logger.info("Created session %s", session_id[:8])
@@ -269,12 +324,14 @@ class KuroEngine:
                     (m for m in reversed(history) if m["role"] != "system"), None
                 )
                 if last_msg:
-                    result.append({
-                        "session_id": session_id,
-                        "preview": last_msg["content"][:50],
-                        "timestamp": str(last_msg["timestamp"]),
-                        "role": last_msg["role"],
-                    })
+                    result.append(
+                        {
+                            "session_id": session_id,
+                            "preview": last_msg["content"][:50],
+                            "timestamp": str(last_msg["timestamp"]),
+                            "role": last_msg["role"],
+                        }
+                    )
         return result
 
     def get_session_count(self) -> int:
@@ -299,6 +356,15 @@ class KuroEngine:
         else:
             recent = self.storage.get_recent_context(session_id, self.context_length)
             messages = [{"role": m["role"], "content": m["content"]} for m in recent]
+            summary = self.user_memory.get_summary()
+            if summary:
+                messages.insert(
+                    0,
+                    {
+                        "role": "system",
+                        "content": f"[Conversation Summary: {summary}]",
+                    },
+                )
 
             try:
                 response = self.client.chat.completions.create(
@@ -312,6 +378,7 @@ class KuroEngine:
                 raise
 
         mood, emotion = self._compute_character_state(user_input, kuro_reply)
+        self.user_memory.set_mood(mood, emotion)
 
         if self.tts_enabled and not self.dry_run:
             try:
@@ -340,6 +407,7 @@ class KuroEngine:
                 emotion_level=emotion,
                 context_summary=f"Topic: {user_input[:50]}...",
             )
+            self._maybe_summarize(session_id)
 
         return {
             "text": kuro_reply,
@@ -408,6 +476,40 @@ class KuroEngine:
     #  Lifecycle                                                           #
     # ------------------------------------------------------------------ #
 
+    def _maybe_summarize(self, session_id: str) -> None:
+        threshold = self.config.get("chat", {}).get("summarization_threshold", 20)
+        if threshold <= 0:
+            return
+        count = self.storage.get_message_count(session_id)
+        if count < threshold:
+            return
+        half = count // 2
+        history = self.storage.get_conversation_history(session_id, limit=half)
+        history = [m for m in history if m["role"] != "system"]
+        if not history:
+            return
+        text = "\n".join(f"{m['role']}: {m['content']}" for m in history)
+        try:
+            response = self.client.chat.completions.create(
+                model=self.extraction_model_name or self.model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Summarize this conversation concisely in 2-3 sentences. Focus on key facts, decisions, and emotional tone.",
+                    },
+                    {"role": "user", "content": text},
+                ],
+                temperature=0.3,
+            )
+            summary = response.choices[0].message.content.strip()
+            summary = _strip_think_tags(summary)
+            self.user_memory.set_summary(summary)
+            logger.info(
+                "Conversation summarized (%d messages): %s", count, summary[:80]
+            )
+        except Exception as e:
+            logger.warning("Summarization failed: %s", e)
+
     def close(self) -> None:
         self.storage.close()
         logger.info("KuroEngine closed")
@@ -437,8 +539,14 @@ class KuroEngine:
             response = self.extraction_client.chat.completions.create(
                 model=self.extraction_model_name,
                 messages=[
-                    {"role": "system", "content": "You are a data extraction assistant. Extract structured info from user messages. Return only JSON."},
-                    {"role": "user", "content": self._EXTRACTION_PROMPT.format(text=user_input)},
+                    {
+                        "role": "system",
+                        "content": "You are a data extraction assistant. Extract structured info from user messages. Return only JSON.",
+                    },
+                    {
+                        "role": "user",
+                        "content": self._EXTRACTION_PROMPT.format(text=user_input),
+                    },
                 ],
                 temperature=0.1,
             )
@@ -468,8 +576,12 @@ class KuroEngine:
         if data.get("favorite_character"):
             source = data.get("favorite_character_from", "unknown")
             ctx = f"from {source}" if source and source != "unknown" else None
-            self.user_memory.add_preference("favorite_character", data["favorite_character"], ctx)
-            logger.info("LLM extracted: favorite_character=%s", data["favorite_character"])
+            self.user_memory.add_preference(
+                "favorite_character", data["favorite_character"], ctx
+            )
+            logger.info(
+                "LLM extracted: favorite_character=%s", data["favorite_character"]
+            )
             found = True
         for hobby in data.get("hobbies", []):
             self.user_memory.add_fact(f"Enjoys {hobby}")
@@ -501,7 +613,9 @@ class KuroEngine:
                     if len(match.groups()) >= 2 and match.group(2)
                     else extra_context or "source unknown"
                 )
-                self.user_memory.add_preference("favorite_character", name, f"from {source}")
+                self.user_memory.add_preference(
+                    "favorite_character", name, f"from {source}"
+                )
                 logger.info("Remembered: likes %s from %s", name, source)
                 break
 
@@ -510,9 +624,9 @@ class KuroEngine:
             if match:
                 media = match.group(1).strip()
                 media_type = (
-                    "anime" if "anime" in user_lower
-                    else "manga" if "manga" in user_lower
-                    else "series"
+                    "anime"
+                    if "anime" in user_lower
+                    else "manga" if "manga" in user_lower else "series"
                 )
                 self.user_memory.add_fact(f"Interested in {media} ({media_type})")
                 logger.info("Remembered: interested in %s", media)
@@ -526,7 +640,9 @@ class KuroEngine:
                 elif "food" in user_lower:
                     self.user_memory.add_preference("favorite_food", match.group(1))
                 elif len(match.groups()) >= 2:
-                    self.user_memory.add_preference(f"favorite_{match.group(1)}", match.group(2))
+                    self.user_memory.add_preference(
+                        f"favorite_{match.group(1)}", match.group(2)
+                    )
                 break
 
         for pattern in _NAME_PATTERNS:
@@ -544,13 +660,39 @@ class KuroEngine:
                 break
 
     @staticmethod
-    def _compute_character_state(user_input: str, ai_response: str) -> tuple[str, float]:
+    def _compute_character_state(
+        user_input: str, ai_response: str
+    ) -> tuple[str, float]:
         user_lower = user_input.lower()
 
-        positive_words = {"thanks", "love", "great", "happy", "fun", "amazing", "good",
-                          "nice", "wonderful", "awesome", "cool", "best", "fantastic"}
-        negative_words = {"hate", "sad", "angry", "bad", "terrible", "awful", "horrible",
-                          "worst", "ugly", "stupid", "annoying"}
+        positive_words = {
+            "thanks",
+            "love",
+            "great",
+            "happy",
+            "fun",
+            "amazing",
+            "good",
+            "nice",
+            "wonderful",
+            "awesome",
+            "cool",
+            "best",
+            "fantastic",
+        }
+        negative_words = {
+            "hate",
+            "sad",
+            "angry",
+            "bad",
+            "terrible",
+            "awful",
+            "horrible",
+            "worst",
+            "ugly",
+            "stupid",
+            "annoying",
+        }
 
         words = set(user_lower.split())
         pos_score = len(words & positive_words)

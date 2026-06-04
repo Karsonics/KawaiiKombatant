@@ -14,6 +14,12 @@ pip install -r requirements.txt
 # 3. Run the bot (standalone mode)
 python bot_main.py
 
+# Common flags:
+python bot_main.py --dry-run       # Validate config, skip LLM/DB
+python bot_main.py --voice kuro    # Select TTS voice preset
+python bot_main.py --verbose       # Debug-level console logs
+python bot_main.py --log-json      # JSON-formatted logs
+
 # Or run as a WebSocket server (for multi-client setups)
 python -m server.kuro_api
 # Then connect with the CLI client:
@@ -46,8 +52,8 @@ All settings live in `configs/`:
 
 | File | Purpose |
 |------|---------|
-| `bot_config.yaml` | LLM model, character prompt, chat settings |
-| `sovits_config.yaml` | TTS API endpoint, voice reference audio |
+| `bot_config.yaml` | LLM provider/model, character prompt, chat settings |
+| `sovits_config.yaml` | TTS API endpoint, voice reference audio, emotion maps |
 | `database_config.yaml` | MySQL connection (gitignored — contains credentials) |
 | `character_config.yaml` | Personality presets (tsundere, kuudere, default) |
 | `presets/` | Detailed personality profile files |
@@ -64,6 +70,43 @@ character:
     Your custom system prompt here...
 ```
 
+### LLM Backends
+
+The `llm:` section in `bot_config.yaml` supports multiple providers:
+
+```yaml
+llm:
+  provider: "ollama"          # "ollama" | "openai" | "openrouter" | "custom"
+  base_url: "http://localhost:11434/v1"   # per-provider defaults exist
+  api_key: "ollama"                       # or your API key
+  model: "qwen2.5:14b"
+  extraction_model: "qwen2.5:0.5b"        # smaller model for entity extraction
+  extraction_enabled: true                # set false to use regex-only
+```
+
+The old `ollama:` config key is still supported as a fallback.
+
+### Conversation Summarization
+
+When a session exceeds `summarization_threshold` messages, Kuro automatically
+summarizes older messages using the LLM and injects the summary as context.
+This effectively doubles the context window without losing history.
+
+```yaml
+chat:
+  context_length: 15
+  summarization_threshold: 20   # summarize when ≥20 messages exist
+```
+
+Set to `0` to disable summarization.
+
+### Character Mood Persistence
+
+Kuro's mood and emotion level are saved to the `user_preferences` table after
+every message. When a new session starts, the last known mood is restored
+instead of resetting to neutral. This means Kuro remembers how your last
+conversation ended.
+
 ### Changing the Voice
 
 Edit `configs/sovits_config.yaml`:
@@ -74,6 +117,52 @@ reference:
   audio_text: "Words spoken in the reference audio"
   language: "en"
 ```
+
+Voice presets can be defined and selected at startup:
+
+```yaml
+voices:
+  kuro:
+    audio_path: "./assets/voices/kuro.wav"
+    audio_text: "Kuro's reference"
+    language: "ja"
+  megumi:
+    audio_path: "./assets/voices/megumi.wav"
+    audio_text: "Megumi's reference"
+    language: "en"
+
+output:
+  device: null   # null = default device, or an integer device ID
+```
+
+Select a voice at startup:
+```bash
+python bot_main.py --voice kuro
+python bot_main.py --voice /path/to/custom.wav   # direct path also works
+```
+
+Audio output device: set `output.device` to an integer device ID. List
+available devices:
+```bash
+python -c "import sounddevice; print(sounddevice.query_devices())"
+```
+
+### Emotional TTS
+
+Kuro's mood (happy, annoyed, curious, etc.) is passed to the TTS engine.
+Configure mood-to-emotion-tag mappings in `sovits_config.yaml`:
+
+```yaml
+emotion:
+  mood_map:
+    happy: "[HAPPY]"
+    annoyed: "[ANGRY]"
+    sad: "[SAD]"
+    excited: "[EXCITED]"
+```
+
+The tag is prepended to the TTS text so supported backends can adjust their
+output. Unsupported backends (like GPT-SoVITS) log the mood and ignore it.
 
 ## Commands
 
@@ -310,11 +399,59 @@ KawaiiKombatant/
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v
-# Or individually:
+# Full suite (skipping GPU/LLM tests that need external services)
+make test
+# or
+python -m pytest tests/ -v --ignore=tests/test_gpu.py --ignore=tests/test_llm.py
+
+# Individual test files
 python tests/test_extract_user_info.py
-python tests/test_llm.py
+python tests/test_think_tags.py
 ```
+
+## Development
+
+### Makefile
+
+```bash
+make run         # Start the bot
+make test        # Run tests
+make lint        # Run ruff linter
+make typecheck   # Run mypy type checker
+make precommit   # Run all pre-commit hooks
+make clean       # Remove __pycache__ and logs
+```
+
+### pre-commit Hooks
+
+The project includes a `.pre-commit-config.yaml` that runs on every commit:
+
+- **black** — auto-formats Python code
+- **ruff** — lints for common issues
+- **pytest** — runs the test suite
+
+Install the hooks:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+### Logging
+
+- `kawaii.log` — rotating log file (5 MB max, 3 backups)
+- `--verbose` / `-v` — debug-level console output
+- `--log-json` — JSON-formatted logs instead of plaintext
+
+### Dry-Run Mode
+
+```bash
+python bot_main.py --dry-run
+```
+
+Validates config files, runs entity extraction, and prints mock responses
+without connecting to LLM or database. Useful for testing regex patterns and
+config changes.
 
 ## License
 

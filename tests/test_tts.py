@@ -1,5 +1,6 @@
 import unittest
 
+
 class TestTTS(unittest.TestCase):
     def setUp(self):
         # Setup code that runs before each test
@@ -13,5 +14,6 @@ class TestTTS(unittest.TestCase):
         # Test audio output quality
         pass
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 import unittest
 import torch
 
+
 class TestGPU(unittest.TestCase):
     def setUp(self):
         # Setup code that runs before each test
@@ -18,5 +19,6 @@ class TestGPU(unittest.TestCase):
             gpu_memory = torch.cuda.get_device_properties(0).total_memory
             self.assertGreater(gpu_memory, 0, "GPU memory should be greater than 0")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

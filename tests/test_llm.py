@@ -5,7 +5,7 @@ from openai import OpenAI
 
 # ── Config ──────────────────────────────────────────────
 OLLAMA_BASE_URL = "http://localhost:11434/v1"
-MODEL_TO_TEST   = "qwen2.5:14b"   # ← change this to test other models
+MODEL_TO_TEST = "qwen2.5:14b"  # ← change this to test other models
 
 SYSTEM_PROMPT = (
     "You are a tsundere wolf girl named Kuro. You're sarcastic, easily flustered, "
@@ -33,8 +33,8 @@ def chat(user_message: str, system: str = SYSTEM_PROMPT) -> dict:
         tokens_per_sec - rough estimate (chars / 4 / time)
     """
     messages = [
-        {"role": "system",  "content": system},
-        {"role": "user",    "content": user_message},
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_message},
     ]
 
     start = time.perf_counter()
@@ -44,11 +44,11 @@ def chat(user_message: str, system: str = SYSTEM_PROMPT) -> dict:
     )
     elapsed = time.perf_counter() - start
 
-    raw_reply   = response.choices[0].message.content
+    raw_reply = response.choices[0].message.content
     clean_reply = strip_think_tags(raw_reply)
 
-    think_match  = re.search(r"<think>(.*?)</think>", raw_reply, re.DOTALL)
-    think_block  = think_match.group(1).strip() if think_match else None
+    think_match = re.search(r"<think>(.*?)</think>", raw_reply, re.DOTALL)
+    think_block = think_match.group(1).strip() if think_match else None
 
     # Rough tokens/sec: OpenAI client doesn't always expose usage,
     # so we fall back to character count / 4 as a proxy.
@@ -61,12 +61,12 @@ def chat(user_message: str, system: str = SYSTEM_PROMPT) -> dict:
     tokens_per_sec = tokens / elapsed if elapsed > 0 else 0
 
     return {
-        "raw_reply":       raw_reply,
-        "clean_reply":     clean_reply,
-        "think_block":     think_block,
-        "total_time":      elapsed,
-        "tokens_per_sec":  tokens_per_sec,
-        "char_count":      len(clean_reply),
+        "raw_reply": raw_reply,
+        "clean_reply": clean_reply,
+        "think_block": think_block,
+        "total_time": elapsed,
+        "tokens_per_sec": tokens_per_sec,
+        "char_count": len(clean_reply),
     }
 
 
@@ -95,7 +95,7 @@ class TestLLM(unittest.TestCase):
     # ── throughput benchmark ─────────────────────────────
     def test_03_throughput(self):
         """Measure tokens/sec on a short generation."""
-        print(f"\n[TEST] Throughput benchmark...")
+        print("\n[TEST] Throughput benchmark...")
         result = chat("Tell me a fun fact about wolves in exactly two sentences.")
         print(f"  Response  : {result['clean_reply'][:120]}...")
         print(f"  Time      : {result['total_time']:.2f}s")
@@ -107,31 +107,36 @@ class TestLLM(unittest.TestCase):
     # ── character stays in persona ───────────────────────
     def test_04_character_persona(self):
         """Kuro should sound like a tsundere (contains 'baka' or '!' or 'hmph')."""
-        print(f"\n[TEST] Character persona check...")
+        print("\n[TEST] Character persona check...")
         result = chat("Do you like talking to me?")
         reply_lower = result["clean_reply"].lower()
         print(f"  Kuro says : {result['clean_reply'][:200]}")
-        has_persona = any(word in reply_lower for word in ["baka", "hmph", "!", "wolf", "tail", "ears"])
+        has_persona = any(
+            word in reply_lower
+            for word in ["baka", "hmph", "!", "wolf", "tail", "ears"]
+        )
         self.assertTrue(has_persona, "Response doesn't seem in-character")
-        print(f"  ✓ In-character response detected")
+        print("  ✓ In-character response detected")
 
     # ── think-tag stripping (relevant for DeepSeek R1) ───
     def test_05_think_tag_stripping(self):
         """Clean reply must never contain raw <think> tags."""
-        print(f"\n[TEST] Think-tag stripping...")
+        print("\n[TEST] Think-tag stripping...")
         result = chat("Explain quantum physics simply.")
-        self.assertNotIn("<think>",  result["clean_reply"])
+        self.assertNotIn("<think>", result["clean_reply"])
         self.assertNotIn("</think>", result["clean_reply"])
         if result["think_block"]:
-            print(f"  ℹ  Think block found ({len(result['think_block'])} chars) — stripped OK")
+            print(
+                f"  ℹ  Think block found ({len(result['think_block'])} chars) — stripped OK"
+            )
         else:
-            print(f"  ℹ  No think block (expected for non-reasoning models)")
-        print(f"  ✓ Clean reply is tag-free")
+            print("  ℹ  No think block (expected for non-reasoning models)")
+        print("  ✓ Clean reply is tag-free")
 
     # ── multi-turn context ───────────────────────────────
     def test_06_multi_turn_speed(self):
         """Three back-to-back messages — each should respond in < 60s."""
-        print(f"\n[TEST] Multi-turn speed...")
+        print("\n[TEST] Multi-turn speed...")
         prompts = [
             "Hi Kuro, what's your name?",
             "Do you have any hobbies?",
@@ -139,13 +144,15 @@ class TestLLM(unittest.TestCase):
         ]
         for i, prompt in enumerate(prompts, 1):
             result = chat(prompt)
-            print(f"  Turn {i}: {result['total_time']:.2f}s | {result['clean_reply'][:80]}...")
+            print(
+                f"  Turn {i}: {result['total_time']:.2f}s | {result['clean_reply'][:80]}..."
+            )
             self.assertLess(result["total_time"], 60)
 
     # ── response format ──────────────────────────────────
     def test_07_response_format(self):
         """Reply should be a non-empty string with no leading/trailing whitespace issues."""
-        print(f"\n[TEST] Response format...")
+        print("\n[TEST] Response format...")
         result = chat("How are you feeling today, Kuro?")
         reply = result["clean_reply"]
         self.assertIsInstance(reply, str)
@@ -157,7 +164,7 @@ class TestLLM(unittest.TestCase):
 # ── Entry point ──────────────────────────────────────────
 if __name__ == "__main__":
     print("=" * 60)
-    print(f"  KawaiiKombatant LLM Test Suite")
+    print("  KawaiiKombatant LLM Test Suite")
     print(f"  Model : {MODEL_TO_TEST}")
     print(f"  URL   : {OLLAMA_BASE_URL}")
     print("=" * 60)

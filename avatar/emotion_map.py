@@ -3,8 +3,6 @@ import random
 import yaml
 from typing import Optional
 
-from utils.logging import logger
-
 
 class MoodConfig:
     def __init__(self, config_path: str = "configs/vtube_config.yaml") -> None:

@@ -16,24 +16,30 @@ def retry(
         @wraps(func)
         def wrapper(*args, **kwargs):
             from utils.logging import logger
-            last_exc = None
+
             for attempt in range(1, max_attempts + 1):
                 try:
                     return func(*args, **kwargs)
                 except exceptions as e:
-                    last_exc = e
                     if attempt == max_attempts:
                         logger.error(
                             "%s failed after %d attempts: %s",
-                            func.__name__, max_attempts, e,
+                            func.__name__,
+                            max_attempts,
+                            e,
                         )
                         raise
                     logger.warning(
                         "%s failed (attempt %d/%d): %s. Retrying in %.1fs...",
-                        func.__name__, attempt, max_attempts, e,
+                        func.__name__,
+                        attempt,
+                        max_attempts,
+                        e,
                         delay * (backoff ** (attempt - 1)),
                     )
                     time.sleep(delay * (backoff ** (attempt - 1)))
             return None
+
         return wrapper
+
     return decorator

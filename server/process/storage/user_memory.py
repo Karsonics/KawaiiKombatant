@@ -1,12 +1,12 @@
 from server.process.storage.mysql_storage import MySQLConversationStorage
 import json
-from typing import Dict, List, Optional, Any
-
-from utils.logging import logger
+from typing import Dict, Optional
 
 
 class UserMemory:
-    def __init__(self, storage: MySQLConversationStorage, user_id: str = "default_user") -> None:
+    def __init__(
+        self, storage: MySQLConversationStorage, user_id: str = "default_user"
+    ) -> None:
         self.storage = storage
         self.user_id = user_id
         self.memory = self._load_memory()
@@ -20,7 +20,9 @@ class UserMemory:
             "important_facts": [],
             "detailed_preferences": {},
             "conversation_summary": [],
-            "topics_discussed": []
+            "topics_discussed": [],
+            "last_mood": "neutral",
+            "last_emotion": 0.5,
         }
 
     def _ensure_all_fields(self) -> None:
@@ -42,14 +44,14 @@ class UserMemory:
         cursor = connection.cursor(dictionary=True)
 
         try:
-            table_name = self.storage.config['tables']['user_preferences']
+            table_name = self.storage.config["tables"]["user_preferences"]
             query = f"SELECT preferences FROM {table_name} WHERE user_id = %s"
             cursor.execute(query, (self.user_id,))
             result = cursor.fetchone()
 
-            if result and result['preferences']:
+            if result and result["preferences"]:
                 try:
-                    loaded_memory = json.loads(result['preferences'])
+                    loaded_memory = json.loads(result["preferences"])
                     default_memory = self._create_default_memory()
                     for key in default_memory:
                         if key not in loaded_memory:
@@ -71,7 +73,7 @@ class UserMemory:
         cursor = connection.cursor()
 
         try:
-            table_name = self.storage.config['tables']['user_preferences']
+            table_name = self.storage.config["tables"]["user_preferences"]
             memory_json = json.dumps(self.memory)
 
             query = f"""
@@ -101,7 +103,9 @@ class UserMemory:
             if pref_entry not in self.memory["detailed_preferences"][category]:
                 self.memory["detailed_preferences"][category].append(pref_entry)
                 if len(self.memory["detailed_preferences"][category]) > 5:
-                    self.memory["detailed_preferences"][category] = self.memory["detailed_preferences"][category][-5:]
+                    self.memory["detailed_preferences"][category] = self.memory[
+                        "detailed_preferences"
+                    ][category][-5:]
         else:
             self.memory["preferences"][category] = value
 
@@ -117,8 +121,11 @@ class UserMemory:
         else:
             fact_entry = {"fact": fact}
 
-        existing = [f for f in self.memory["important_facts"]
-                   if (isinstance(f, dict) and f.get("fact") == fact) or f == fact]
+        existing = [
+            f
+            for f in self.memory["important_facts"]
+            if (isinstance(f, dict) and f.get("fact") == fact) or f == fact
+        ]
 
         if not existing:
             self.memory["important_facts"].append(fact_entry)
@@ -141,37 +148,72 @@ class UserMemory:
     def get_personal_info(self, key: str) -> Optional[str]:
         return self.memory["personal_info"].get(key)
 
+    def set_mood(self, mood: str, emotion: float) -> None:
+        self.memory["last_mood"] = mood
+        self.memory["last_emotion"] = emotion
+        self._dirty = True
+
+    def get_mood(self) -> str:
+        return self.memory.get("last_mood", "neutral")
+
+    def get_emotion(self) -> float:
+        return self.memory.get("last_emotion", 0.5)
+
+    def set_summary(self, summary: str) -> None:
+        self.memory["conversation_summary"] = summary
+        self._dirty = True
+
+    def get_summary(self) -> str:
+        summary = self.memory.get("conversation_summary", "")
+        if isinstance(summary, list):
+            return " ".join(summary) if summary else ""
+        return summary if summary else ""
+
     def get_memory_summary(self) -> str:
         summary_parts = []
 
         if self.memory.get("personal_info"):
-            info_str = ", ".join([f"{k}: {v}" for k, v in self.memory["personal_info"].items()])
+            info_str = ", ".join(
+                [f"{k}: {v}" for k, v in self.memory["personal_info"].items()]
+            )
             summary_parts.append(f"Personal info: {info_str}")
 
         if self.memory.get("preferences"):
-            pref_str = ", ".join([f"{k}: {v}" for k, v in self.memory["preferences"].items()])
+            pref_str = ", ".join(
+                [f"{k}: {v}" for k, v in self.memory["preferences"].items()]
+            )
             summary_parts.append(f"Preferences: {pref_str}")
 
         if self.memory.get("detailed_preferences"):
             for category, prefs in self.memory["detailed_preferences"].items():
                 for pref in prefs:
-                    summary_parts.append(f"{category}: {pref['value']} ({pref['context']})")
+                    summary_parts.append(
+                        f"{category}: {pref['value']} ({pref['context']})"
+                    )
 
         if self.memory.get("important_facts"):
             for fact_entry in self.memory["important_facts"][-5:]:
                 if isinstance(fact_entry, dict):
                     if fact_entry.get("context"):
-                        summary_parts.append(f"{fact_entry['fact']} - {fact_entry['context']}")
+                        summary_parts.append(
+                            f"{fact_entry['fact']} - {fact_entry['context']}"
+                        )
                     else:
-                        summary_parts.append(fact_entry['fact'])
+                        summary_parts.append(fact_entry["fact"])
                 else:
                     summary_parts.append(fact_entry)
 
         return " | ".join(summary_parts) if summary_parts else "No stored memories yet."
 
     def build_context_prompt(self) -> str:
-        if not any([self.memory.get("personal_info"), self.memory.get("preferences"),
-                    self.memory.get("detailed_preferences"), self.memory.get("important_facts")]):
+        if not any(
+            [
+                self.memory.get("personal_info"),
+                self.memory.get("preferences"),
+                self.memory.get("detailed_preferences"),
+                self.memory.get("important_facts"),
+            ]
+        ):
             return ""
 
         context = "\n[MEMORY: Things you remember about this user from previous conversations]\n"

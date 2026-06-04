@@ -17,15 +17,14 @@ except ImportError:
 
 def load_config():
     config_path = os.path.join(
-        os.path.dirname(__file__),
-        "..", "..", "..", "configs", "sovits_config.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "configs", "sovits_config.yaml"
     )
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
 
-    ref_path = cfg['reference']['audio_path']
+    ref_path = cfg["reference"]["audio_path"]
     if not os.path.isabs(ref_path):
-        cfg['reference']['audio_path'] = os.path.abspath(
+        cfg["reference"]["audio_path"] = os.path.abspath(
             os.path.join(os.path.dirname(config_path), "..", ref_path)
         )
     return cfg
@@ -34,17 +33,17 @@ def load_config():
 CONFIG = load_config()
 
 SOVITS_API_URL = f"{CONFIG['api']['base_url']}{CONFIG['api']['endpoint']}"
-REF_AUDIO_PATH = CONFIG['reference']['audio_path']
-REF_AUDIO_TEXT = CONFIG['reference']['audio_text']
-DEFAULT_LANG = CONFIG['reference']['language']
-SPEED_FACTOR = CONFIG['inference']['speed_factor']
-TOP_K = CONFIG['inference']['top_k']
-TOP_P = CONFIG['inference']['top_p']
-TEMPERATURE = CONFIG['inference']['temperature']
-TARGET_SR = CONFIG['output']['sampling_rate']
-AUDIO_DEVICE = CONFIG['output'].get('device', None)
-ASYNC_PLAYBACK = CONFIG['output']['async_playback']
-EMOTION_MAP = CONFIG.get('emotion', {}).get('mood_map', {})
+REF_AUDIO_PATH = CONFIG["reference"]["audio_path"]
+REF_AUDIO_TEXT = CONFIG["reference"]["audio_text"]
+DEFAULT_LANG = CONFIG["reference"]["language"]
+SPEED_FACTOR = CONFIG["inference"]["speed_factor"]
+TOP_K = CONFIG["inference"]["top_k"]
+TOP_P = CONFIG["inference"]["top_p"]
+TEMPERATURE = CONFIG["inference"]["temperature"]
+TARGET_SR = CONFIG["output"]["sampling_rate"]
+AUDIO_DEVICE = CONFIG["output"].get("device", None)
+ASYNC_PLAYBACK = CONFIG["output"]["async_playback"]
+EMOTION_MAP = CONFIG.get("emotion", {}).get("mood_map", {})
 
 _VOICE_OVERRIDE: dict | None = None
 
@@ -56,13 +55,28 @@ def set_voice(name_or_path: str) -> bool:
         v = voices[name_or_path]
         path = v.get("audio_path", REF_AUDIO_PATH)
         _VOICE_OVERRIDE = {
-            "audio_path": os.path.abspath(os.path.join(os.path.dirname(
-                os.path.join(os.path.dirname(__file__), "..", "..", "..", "configs")
-            ), path)) if not os.path.isabs(path) else path,
+            "audio_path": (
+                os.path.abspath(
+                    os.path.join(
+                        os.path.dirname(
+                            os.path.join(
+                                os.path.dirname(__file__), "..", "..", "..", "configs"
+                            )
+                        ),
+                        path,
+                    )
+                )
+                if not os.path.isabs(path)
+                else path
+            ),
             "audio_text": v.get("audio_text", REF_AUDIO_TEXT),
             "language": v.get("language", DEFAULT_LANG),
         }
-        logger.info("TTS voice set to preset '%s' (%s)", name_or_path, _VOICE_OVERRIDE["audio_path"])
+        logger.info(
+            "TTS voice set to preset '%s' (%s)",
+            name_or_path,
+            _VOICE_OVERRIDE["audio_path"],
+        )
         return True
     if os.path.exists(name_or_path):
         _VOICE_OVERRIDE = {
@@ -113,7 +127,9 @@ def speak(text: str, lang: str = None, mood: str = None) -> bool:
             "temperature": TEMPERATURE,
         }
 
-        response = requests.get(SOVITS_API_URL, params=params, timeout=CONFIG['api']['timeout'])
+        response = requests.get(
+            SOVITS_API_URL, params=params, timeout=CONFIG["api"]["timeout"]
+        )
         response.raise_for_status()
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -124,14 +140,22 @@ def speak(text: str, lang: str = None, mood: str = None) -> bool:
 
         if samplerate != TARGET_SR:
             import librosa
-            data = librosa.resample(data.T if data.ndim > 1 else data,
-                                   orig_sr=samplerate, target_sr=TARGET_SR)
+
+            data = librosa.resample(
+                data.T if data.ndim > 1 else data,
+                orig_sr=samplerate,
+                target_sr=TARGET_SR,
+            )
             if data.ndim > 1:
                 data = data.T
             samplerate = TARGET_SR
 
         if ASYNC_PLAYBACK:
-            threading.Thread(target=_play_audio, args=(data.copy(), samplerate, tmp_path), daemon=True).start()
+            threading.Thread(
+                target=_play_audio,
+                args=(data.copy(), samplerate, tmp_path),
+                daemon=True,
+            ).start()
         else:
             _play_audio(data, samplerate, tmp_path)
             os.unlink(tmp_path)
@@ -139,7 +163,9 @@ def speak(text: str, lang: str = None, mood: str = None) -> bool:
         return True
 
     except requests.exceptions.ConnectionError:
-        logger.warning("GPT-SoVITS API not reachable - is api_v2.py running on port 9880?")
+        logger.warning(
+            "GPT-SoVITS API not reachable - is api_v2.py running on port 9880?"
+        )
         return False
     except Exception as e:
         logger.error("TTS error: %s", e)
@@ -159,7 +185,7 @@ def _play_audio(data, samplerate, tmp_path):
 
 def check_api_available() -> bool:
     try:
-        requests.get(CONFIG['api']['base_url'], timeout=3)
+        requests.get(CONFIG["api"]["base_url"], timeout=3)
         return True
     except Exception:
         return False

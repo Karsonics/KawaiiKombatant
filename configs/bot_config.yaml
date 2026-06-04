@@ -21,6 +21,7 @@ ollama:
 chat:
   context_length: 15
   user_id: "default_user"
+  summarization_threshold: 20
 
 character:
   name: "Kuro"

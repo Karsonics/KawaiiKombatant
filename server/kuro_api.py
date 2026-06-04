@@ -21,7 +21,9 @@ app = FastAPI(title="Kuro V-Tuber Engine")
 _web_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "web"
 if _web_dir.exists():
     app.mount("/static", StaticFiles(directory=str(_web_dir)), name="web_static")
-    app.mount("/models", StaticFiles(directory=str(_web_dir / "models")), name="web_models")
+    app.mount(
+        "/models", StaticFiles(directory=str(_web_dir / "models")), name="web_models"
+    )
 
     @app.get("/")
     async def web_root():
@@ -90,13 +92,17 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     session_id = msg.get("session_id") or engine.create_session()
 
                 if not audio_b64:
-                    await ws.send_json({"type": "error", "data": "No audio data provided"})
+                    await ws.send_json(
+                        {"type": "error", "data": "No audio data provided"}
+                    )
                     continue
 
                 try:
                     audio_bytes = base64.b64decode(audio_b64)
                 except Exception:
-                    await ws.send_json({"type": "error", "data": "Invalid base64 audio data"})
+                    await ws.send_json(
+                        {"type": "error", "data": "Invalid base64 audio data"}
+                    )
                     continue
 
                 loop = asyncio.get_running_loop()
@@ -128,11 +134,23 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
                 if cmd == "subscribe_mood":
                     _mood_subscribers.add(ws)
-                    await ws.send_json({"type": "command_result", "command": cmd, "data": "Subscribed to mood updates"})
+                    await ws.send_json(
+                        {
+                            "type": "command_result",
+                            "command": cmd,
+                            "data": "Subscribed to mood updates",
+                        }
+                    )
                 else:
                     result_data = _handle_command(cmd, session_id)
                     if isinstance(result_data, str):
-                        await ws.send_json({"type": "command_result", "command": cmd, "data": result_data})
+                        await ws.send_json(
+                            {
+                                "type": "command_result",
+                                "command": cmd,
+                                "data": result_data,
+                            }
+                        )
                     else:
                         await ws.send_json(result_data)
 
@@ -140,7 +158,9 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     session_id = None
 
             else:
-                await ws.send_json({"type": "error", "data": f"Unknown message type: {msg_type}"})
+                await ws.send_json(
+                    {"type": "error", "data": f"Unknown message type: {msg_type}"}
+                )
 
     except WebSocketDisconnect:
         _mood_subscribers.discard(ws)
@@ -179,7 +199,12 @@ def _handle_command(cmd: str, session_id: str | None) -> str | dict:
     elif cmd == "sessions":
         recent = engine.get_recent_sessions()
         if not recent:
-            return {"type": "command_result", "command": cmd, "data": [], "display": "No sessions found"}
+            return {
+                "type": "command_result",
+                "command": cmd,
+                "data": [],
+                "display": "No sessions found",
+            }
         return {"type": "command_result", "command": cmd, "data": recent}
     else:
         return {"type": "error", "data": f"Unknown command: {cmd}"}

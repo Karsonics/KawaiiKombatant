@@ -28,7 +28,7 @@ class VTubeController:
     async def connect(self) -> bool:
         uri = f"ws://{self.config.vts_host}:{self.config.vts_port}"
         try:
-            self.ws = await websockets.connect(uri, max_size=2 ** 20, ping_interval=None)
+            self.ws = await websockets.connect(uri, max_size=2**20, ping_interval=None)
             await self._authenticate()
             logger.info("Connected to VTube Studio")
             return True

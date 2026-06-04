@@ -1,5 +1,6 @@
 import unittest
 
+
 class TestFullPipeline(unittest.TestCase):
     def setUp(self):
         # Setup code that runs before each test
@@ -17,5 +18,6 @@ class TestFullPipeline(unittest.TestCase):
         # Test error handling across the pipeline
         pass
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

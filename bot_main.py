@@ -2,7 +2,6 @@
 import sys
 import asyncio
 import json
-import os
 
 from utils.logging import logger
 
@@ -13,7 +12,7 @@ def run_direct(dry_run: bool = False, voice: str = None) -> None:
     engine = KuroEngine(dry_run=dry_run, voice_override=voice)
     engine.display_memory()
     session_id = _pick_session(engine)
-    print(f"\nCommands: 'exit' | 'history' | 'memory' | 'clear_memory'\n")
+    print("\nCommands: 'exit' | 'history' | 'memory' | 'clear_memory'\n")
 
     while True:
         user_input = input("You: ").strip()
@@ -87,7 +86,9 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
 
     async with ws:
         session_id = None
-        print("\nCommands: 'exit' | 'history' | 'memory' | 'clear_memory' | 'new_session'\n")
+        print(
+            "\nCommands: 'exit' | 'history' | 'memory' | 'clear_memory' | 'new_session'\n"
+        )
 
         while True:
             user_input = input("You: ").strip()
@@ -98,12 +99,21 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
                 print("Goodbye!")
                 break
 
-            if user_input.lower() in ("history", "memory", "clear_memory",
-                                       "new_session", "sessions"):
-                await ws.send(json.dumps({
-                    "type": "command",
-                    "command": user_input.lower(),
-                }))
+            if user_input.lower() in (
+                "history",
+                "memory",
+                "clear_memory",
+                "new_session",
+                "sessions",
+            ):
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "command",
+                            "command": user_input.lower(),
+                        }
+                    )
+                )
                 resp = json.loads(await ws.recv())
                 if resp.get("type") == "command_result":
                     print(f"\n{resp['data']}\n")
@@ -113,11 +123,15 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
                     print(f"\n[Error] {resp['data']}\n")
                 continue
 
-            await ws.send(json.dumps({
-                "type": "message",
-                "data": user_input,
-                "session_id": session_id,
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "message",
+                        "data": user_input,
+                        "session_id": session_id,
+                    }
+                )
+            )
 
             resp = json.loads(await ws.recv())
             rtype = resp.get("type")
@@ -130,9 +144,11 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
                 print(f"\n[Error] {resp['data']}\n")
 
 
-async def run_voice(host: str = "localhost", port: int = 8765,
-                    model: str = "base") -> None:
+async def run_voice(
+    host: str = "localhost", port: int = 8765, model: str = "base"
+) -> None:
     from voice.voice_client import VoiceClient
+
     client = VoiceClient(
         ws_url=f"ws://{host}:{port}/ws",
         model_size=model,
@@ -142,6 +158,7 @@ async def run_voice(host: str = "localhost", port: int = 8765,
 
 async def run_avatar(host: str = "localhost", port: int = 8765) -> None:
     from avatar.avatar_client import AvatarClient
+
     client = AvatarClient(host=host, port=port)
     await client.run()
 

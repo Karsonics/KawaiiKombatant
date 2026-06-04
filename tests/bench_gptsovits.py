@@ -25,18 +25,31 @@ import io
 import statistics
 
 parser = argparse.ArgumentParser(description="GPT-SoVITS api_v2 speed benchmark")
-parser.add_argument("--ref_audio", required=True,
-                    help="Absolute path to reference WAV (readable by the server process)")
-parser.add_argument("--ref_text",  required=True,
-                    help="Transcript of what is said in the reference audio")
-parser.add_argument("--ref_lang",  default="en",
-                    help="Language of the reference audio: en / zh / ja  (default: en)")
-parser.add_argument("--text_lang", default=None,
-                    help="Language of the text to synthesise — defaults to --ref_lang")
-parser.add_argument("--host",      default="127.0.0.1")
-parser.add_argument("--port",      default=9880, type=int)
-parser.add_argument("--runs",      default=3, type=int,
-                    help="Number of timed runs per sentence (default: 3)")
+parser.add_argument(
+    "--ref_audio",
+    required=True,
+    help="Absolute path to reference WAV (readable by the server process)",
+)
+parser.add_argument(
+    "--ref_text",
+    required=True,
+    help="Transcript of what is said in the reference audio",
+)
+parser.add_argument(
+    "--ref_lang",
+    default="en",
+    help="Language of the reference audio: en / zh / ja  (default: en)",
+)
+parser.add_argument(
+    "--text_lang",
+    default=None,
+    help="Language of the text to synthesise — defaults to --ref_lang",
+)
+parser.add_argument("--host", default="127.0.0.1")
+parser.add_argument("--port", default=9880, type=int)
+parser.add_argument(
+    "--runs", default=3, type=int, help="Number of timed runs per sentence (default: 3)"
+)
 args = parser.parse_args()
 
 if args.text_lang is None:
@@ -51,9 +64,9 @@ except ImportError:
 BASE = f"http://{args.host}:{args.port}"
 
 # ── Header ────────────────────────────────────────────────────────────────────
-print("\n" + "="*62)
+print("\n" + "=" * 62)
 print("  GPT-SoVITS Speed Benchmark  (api_v2)")
-print("="*62)
+print("=" * 62)
 print(f"  Server     : {BASE}")
 print(f"  Ref audio  : {args.ref_audio}")
 print(f"  Ref lang   : {args.ref_lang}   Text lang: {args.text_lang}")
@@ -63,7 +76,7 @@ print(f"  Runs/sentence : {args.runs}")
 try:
     # A quick probe — will probably get a 400/422 (missing params) but that proves the server is up
     requests.get(f"{BASE}/tts", timeout=4)
-    print(f"  Status     : Server reachable ✓")
+    print("  Status     : Server reachable ✓")
 except requests.exceptions.ConnectionError:
     print(
         f"\n[ERROR] Cannot connect to GPT-SoVITS at {BASE}\n"
@@ -71,20 +84,27 @@ except requests.exceptions.ConnectionError:
     )
     sys.exit(1)
 except Exception:
-    print(f"  Status     : Server reachable ✓")
+    print("  Status     : Server reachable ✓")
 
-print("="*62 + "\n")
+print("=" * 62 + "\n")
 
 # ── Sentences to test ─────────────────────────────────────────────────────────
 SENTENCES = [
-    ("short",  "Hello, how are you doing today?"),
-    ("medium", "The quick brown fox jumps over the lazy dog near the riverbank at sunset."),
-    ("long",   (
-        "Artificial intelligence has transformed many industries over the past decade, "
-        "enabling machines to perform tasks that previously required human intelligence, "
-        "from recognizing speech and images to translating languages and driving cars."
-    )),
+    ("short", "Hello, how are you doing today?"),
+    (
+        "medium",
+        "The quick brown fox jumps over the lazy dog near the riverbank at sunset.",
+    ),
+    (
+        "long",
+        (
+            "Artificial intelligence has transformed many industries over the past decade, "
+            "enabling machines to perform tasks that previously required human intelligence, "
+            "from recognizing speech and images to translating languages and driving cars."
+        ),
+    ),
 ]
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def wav_duration(data: bytes) -> float:
@@ -94,17 +114,18 @@ def wav_duration(data: bytes) -> float:
     except Exception:
         return 0.0
 
+
 def synthesise(text: str) -> tuple:
     """Call /tts and return (wav_bytes, elapsed_sec)."""
     payload = {
-        "text":              text,
-        "text_lang":         args.text_lang,
-        "ref_audio_path":    args.ref_audio,
-        "prompt_text":       args.ref_text,
-        "prompt_lang":       args.ref_lang,
-        "media_type":        "wav",
-        "streaming_mode":    False,
-        "batch_size":        1,
+        "text": text,
+        "text_lang": args.text_lang,
+        "ref_audio_path": args.ref_audio,
+        "prompt_text": args.ref_text,
+        "prompt_lang": args.ref_lang,
+        "media_type": "wav",
+        "streaming_mode": False,
+        "batch_size": 1,
         "text_split_method": "cut5",
     }
     t0 = time.perf_counter()
@@ -114,6 +135,7 @@ def synthesise(text: str) -> tuple:
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code} — {r.text[:150]}")
     return r.content, elapsed
+
 
 # ── Warm-up (first call initialises VRAM, not fair to count it) ───────────────
 print("  Warming up — first inference loads weights into VRAM...")
@@ -149,26 +171,38 @@ for label, text in SENTENCES:
         print("    → all runs failed, skipping\n")
         continue
 
-    avg  = statistics.mean(good)
+    avg = statistics.mean(good)
     best = min(good)
-    rtf  = avg / audio_sec if audio_sec > 0 else float("nan")
-    results.append(dict(label=label, chars=len(text),
-                        audio_sec=audio_sec, avg=avg, best=best, rtf=rtf))
-    print(f"    → avg {avg:.2f}s | best {best:.2f}s | "
-          f"audio {audio_sec:.2f}s | RTF {rtf:.2f}x\n")
+    rtf = avg / audio_sec if audio_sec > 0 else float("nan")
+    results.append(
+        dict(
+            label=label,
+            chars=len(text),
+            audio_sec=audio_sec,
+            avg=avg,
+            best=best,
+            rtf=rtf,
+        )
+    )
+    print(
+        f"    → avg {avg:.2f}s | best {best:.2f}s | "
+        f"audio {audio_sec:.2f}s | RTF {rtf:.2f}x\n"
+    )
 
 # ── Summary ───────────────────────────────────────────────────────────────────
-print("="*62)
+print("=" * 62)
 print("  RESULTS — GPT-SoVITS  (port 9880)")
-print("="*62)
+print("=" * 62)
 print(f"  {'Sentence':<8} {'Chars':>5} {'Audio':>7} {'Avg':>7} {'Best':>7} {'RTF':>7}")
 print(f"  {'-'*8} {'-'*5} {'-'*7} {'-'*7} {'-'*7} {'-'*7}")
 for r in results:
-    print(f"  {r['label']:<8} {r['chars']:>5} "
-          f"{r['audio_sec']:>6.2f}s "
-          f"{r['avg']:>6.2f}s "
-          f"{r['best']:>6.2f}s "
-          f"{r['rtf']:>6.2f}x")
-print("="*62)
+    print(
+        f"  {r['label']:<8} {r['chars']:>5} "
+        f"{r['audio_sec']:>6.2f}s "
+        f"{r['avg']:>6.2f}s "
+        f"{r['best']:>6.2f}s "
+        f"{r['rtf']:>6.2f}x"
+    )
+print("=" * 62)
 print("  RTF < 1.0 = faster than real-time  |  RTF > 1.0 = slower")
-print("="*62 + "\n")
+print("=" * 62 + "\n")
