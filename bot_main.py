@@ -7,10 +7,10 @@ import os
 from utils.logging import logger
 
 
-def run_direct() -> None:
+def run_direct(dry_run: bool = False, voice: str = None) -> None:
     from server.kuro_engine import KuroEngine
 
-    engine = KuroEngine()
+    engine = KuroEngine(dry_run=dry_run, voice_override=voice)
     engine.display_memory()
     session_id = _pick_session(engine)
     print(f"\nCommands: 'exit' | 'history' | 'memory' | 'clear_memory'\n")
@@ -146,42 +146,53 @@ async def run_avatar(host: str = "localhost", port: int = 8765) -> None:
     await client.run()
 
 
-def _parse_host_port() -> tuple[str, int]:
-    host = "localhost"
-    port = 8765
+def _parse_arg(name: str, default=None):
     for i, arg in enumerate(sys.argv):
-        if arg == "--host" and i + 1 < len(sys.argv):
-            host = sys.argv[i + 1]
-        if arg == "--port" and i + 1 < len(sys.argv):
-            port = int(sys.argv[i + 1])
-        if arg.startswith("--port="):
-            port = int(arg.split("=", 1)[1])
+        if arg == name and i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+        if arg.startswith(f"{name}="):
+            return arg.split("=", 1)[1]
+    return default
+
+
+def _has_flag(name: str) -> bool:
+    return name in sys.argv
+
+
+def _parse_host_port() -> tuple[str, int]:
+    host = _parse_arg("--host", "localhost")
+    port = int(_parse_arg("--port", "8765"))
     return host, port
 
 
 def main() -> None:
-    if "--avatar" in sys.argv and "--voice" in sys.argv:
+    if _has_flag("--avatar") and _has_flag("--voice"):
         print("--avatar and --voice cannot be combined. Use separate terminals.")
         return
 
-    if "--avatar" in sys.argv:
+    if _has_flag("--dry-run"):
+        print("\n=== DRY RUN MODE ===")
+        print("Config will be validated, no LLM or DB connections made.\n")
+        voice = _parse_arg("--voice")
+        run_direct(dry_run=True, voice=voice)
+        return
+
+    if _has_flag("--avatar"):
         host, port = _parse_host_port()
         asyncio.run(run_avatar(host, port))
 
-    elif "--voice" in sys.argv:
+    elif _has_flag("--voice"):
         host, port = _parse_host_port()
-        model = "base"
-        for i, arg in enumerate(sys.argv):
-            if arg == "--model" and i + 1 < len(sys.argv):
-                model = sys.argv[i + 1]
+        model = _parse_arg("--model", "base")
         asyncio.run(run_voice(host, port, model))
 
-    elif "--ws" in sys.argv:
+    elif _has_flag("--ws"):
         host, port = _parse_host_port()
         asyncio.run(run_ws(host, port))
 
     else:
-        run_direct()
+        voice = _parse_arg("--voice")
+        run_direct(voice=voice)
 
 
 if __name__ == "__main__":

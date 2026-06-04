@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 import sys
 from typing import Optional
 
@@ -19,7 +20,7 @@ def setup_logger(name: str = "kawaii", level: Optional[int] = None) -> logging.L
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    fh = logging.FileHandler("kawaii.log")
+    fh = RotatingFileHandler("kawaii.log", maxBytes=5*1024*1024, backupCount=3)
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(formatter)
 

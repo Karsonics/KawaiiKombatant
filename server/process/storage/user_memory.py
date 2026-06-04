@@ -10,6 +10,7 @@ class UserMemory:
         self.storage = storage
         self.user_id = user_id
         self.memory = self._load_memory()
+        self._dirty = False
         self._ensure_all_fields()
 
     def _create_default_memory(self) -> Dict:
@@ -86,6 +87,11 @@ class UserMemory:
             cursor.close()
             connection.close()
 
+    def flush(self) -> None:
+        if self._dirty:
+            self.save_memory()
+            self._dirty = False
+
     def add_preference(self, category: str, value: str, context: str = None) -> None:
         if context:
             if category not in self.memory["detailed_preferences"]:
@@ -99,11 +105,11 @@ class UserMemory:
         else:
             self.memory["preferences"][category] = value
 
-        self.save_memory()
+        self._dirty = True
 
     def add_personal_info(self, key: str, value: str) -> None:
         self.memory["personal_info"][key] = value
-        self.save_memory()
+        self._dirty = True
 
     def add_fact(self, fact: str, context: str = None) -> bool:
         if context:
@@ -118,7 +124,7 @@ class UserMemory:
             self.memory["important_facts"].append(fact_entry)
             if len(self.memory["important_facts"]) > 30:
                 self.memory["important_facts"] = self.memory["important_facts"][-30:]
-            self.save_memory()
+            self._dirty = True
             return True
         return False
 
@@ -127,7 +133,7 @@ class UserMemory:
             self.memory["topics_discussed"].append(topic)
             if len(self.memory["topics_discussed"]) > 30:
                 self.memory["topics_discussed"] = self.memory["topics_discussed"][-30:]
-            self.save_memory()
+            self._dirty = True
 
     def get_preference(self, category: str) -> Optional[str]:
         return self.memory["preferences"].get(category)

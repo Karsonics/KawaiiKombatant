@@ -1,5 +1,18 @@
 # KawaiiKombatant Bot Configuration
 
+# LLM provider settings (NEW format)
+#   provider: "ollama" | "openai" | "openrouter" | "custom"
+#   base_url and api_key have defaults per provider (see docs)
+#   extraction_model: optional smaller/cheaper model for entity extraction
+llm:
+  provider: "ollama"
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+  model: "qwen2.5:14b"
+  extraction_model: "qwen2.5:0.5b"
+  extraction_enabled: true
+
+# OLD ollama format (still works, overridden by llm: if present)
 ollama:
   base_url: "http://localhost:11434/v1"
   api_key: "ollama"

@@ -11,6 +11,23 @@ reference:
   # Language: en, ja, zh, etc.
   language: "en"
 
+# Named voice presets (selectable via --voice flag)
+voices:
+  megumi:
+    audio_path: "./assets/voices/megumi_clean.wav"
+    audio_text: "For the cost of a meal and basic necessities, you can have the power of an archwizard. Just give me a permanent spot in your party and I'm all yours"
+    language: "en"
+
+# Mood-to-emotion tag mapping (used by TTS backends that support emotion)
+# Set empty map for GPT-SoVITS (ignores unknown params)
+emotion:
+  mood_map:
+    happy: "happy"
+    annoyed: "angry"
+    curious: "surprised"
+    excited: "excited"
+    neutral: ""
+
 inference:
   speed_factor: 1.2
   top_k: 5
@@ -19,6 +36,9 @@ inference:
 
 output:
   sampling_rate: 44100
+  # Audio output device index (null = system default)
+  # List devices with: python -c "import sounddevice; print(sounddevice.query_devices())"
+  device: null
   # true = play audio, false = only generate
   auto_play: true
   # true = async playback (non-blocking), false = blocks chat

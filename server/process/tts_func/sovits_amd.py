@@ -42,10 +42,41 @@ TOP_K = CONFIG['inference']['top_k']
 TOP_P = CONFIG['inference']['top_p']
 TEMPERATURE = CONFIG['inference']['temperature']
 TARGET_SR = CONFIG['output']['sampling_rate']
+AUDIO_DEVICE = CONFIG['output'].get('device', None)
 ASYNC_PLAYBACK = CONFIG['output']['async_playback']
+EMOTION_MAP = CONFIG.get('emotion', {}).get('mood_map', {})
+
+_VOICE_OVERRIDE: dict | None = None
 
 
-def speak(text: str, lang: str = None) -> bool:
+def set_voice(name_or_path: str) -> bool:
+    global _VOICE_OVERRIDE
+    voices = CONFIG.get("voices", {})
+    if name_or_path in voices:
+        v = voices[name_or_path]
+        path = v.get("audio_path", REF_AUDIO_PATH)
+        _VOICE_OVERRIDE = {
+            "audio_path": os.path.abspath(os.path.join(os.path.dirname(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "configs")
+            ), path)) if not os.path.isabs(path) else path,
+            "audio_text": v.get("audio_text", REF_AUDIO_TEXT),
+            "language": v.get("language", DEFAULT_LANG),
+        }
+        logger.info("TTS voice set to preset '%s' (%s)", name_or_path, _VOICE_OVERRIDE["audio_path"])
+        return True
+    if os.path.exists(name_or_path):
+        _VOICE_OVERRIDE = {
+            "audio_path": os.path.abspath(name_or_path),
+            "audio_text": REF_AUDIO_TEXT,
+            "language": DEFAULT_LANG,
+        }
+        logger.info("TTS voice set to custom path: %s", _VOICE_OVERRIDE["audio_path"])
+        return True
+    logger.warning("Voice '%s' not found (no preset, file doesn't exist)", name_or_path)
+    return False
+
+
+def speak(text: str, lang: str = None, mood: str = None) -> bool:
     if not _TTS_DEPS:
         logger.debug("TTS deps missing, skipping audio playback")
         return False
@@ -55,13 +86,25 @@ def speak(text: str, lang: str = None) -> bool:
     if lang is None:
         lang = DEFAULT_LANG
 
+    ref_path = _VOICE_OVERRIDE["audio_path"] if _VOICE_OVERRIDE else REF_AUDIO_PATH
+    ref_text = _VOICE_OVERRIDE["audio_text"] if _VOICE_OVERRIDE else REF_AUDIO_TEXT
+    ref_lang = _VOICE_OVERRIDE["language"] if _VOICE_OVERRIDE else lang
+
+    if mood:
+        emotion_tag = EMOTION_MAP.get(mood, "")
+        if emotion_tag:
+            text = f"[{emotion_tag}] {text}"
+            logger.debug("TTS mood: %s → tag: %s", mood, emotion_tag)
+        else:
+            logger.debug("TTS mood: %s (no tag mapped)", mood)
+
     try:
         params = {
             "text": text,
-            "text_lang": lang,
-            "ref_audio_path": REF_AUDIO_PATH,
-            "prompt_text": REF_AUDIO_TEXT,
-            "prompt_lang": lang,
+            "text_lang": ref_lang,
+            "ref_audio_path": ref_path,
+            "prompt_text": ref_text,
+            "prompt_lang": ref_lang,
             "media_type": "wav",
             "streaming_mode": "false",
             "speed_factor": SPEED_FACTOR,
@@ -107,7 +150,7 @@ def _play_audio(data, samplerate, tmp_path):
     if not _TTS_DEPS:
         return
     try:
-        sd.play(data, samplerate)
+        sd.play(data, samplerate, device=AUDIO_DEVICE)
         sd.wait()
     finally:
         if os.path.exists(tmp_path):

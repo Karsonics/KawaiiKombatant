@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 import os
@@ -10,7 +11,7 @@ from openai import OpenAI
 
 from server.process.storage.mysql_storage import MySQLConversationStorage
 from server.process.storage.user_memory import UserMemory
-from server.process.tts_func.sovits_amd import speak, check_api_available
+from server.process.tts_func.sovits_amd import speak, check_api_available, set_voice as tts_set_voice
 from utils.logging import logger
 
 
@@ -52,19 +53,65 @@ def _strip_think_tags(text: str) -> str:
     return _THINK_TAG_PATTERN.sub("", text).strip()
 
 
+_PROVIDER_DEFAULTS = {
+    "ollama": {"base_url": "http://localhost:11434/v1", "api_key": "ollama"},
+    "openai": {"base_url": "https://api.openai.com/v1", "api_key": None},
+    "openrouter": {"base_url": "https://openrouter.ai/api/v1", "api_key": None},
+    "custom": {"base_url": None, "api_key": None},
+}
+
+
+def _resolve_llm_config(config: dict) -> dict:
+    if "llm" in config:
+        llm_cfg = config["llm"]
+    elif "ollama" in config:
+        llm_cfg = {**config["ollama"], "provider": "ollama"}
+    else:
+        llm_cfg = {"provider": "ollama"}
+
+    provider = llm_cfg.get("provider", "ollama")
+    defaults = _PROVIDER_DEFAULTS.get(provider, _PROVIDER_DEFAULTS["custom"])
+
+    resolved = {
+        "provider": provider,
+        "base_url": llm_cfg.get("base_url") or defaults["base_url"],
+        "api_key": llm_cfg.get("api_key") or defaults["api_key"],
+        "model": llm_cfg.get("model", ""),
+        "extraction_model": llm_cfg.get("extraction_model") or llm_cfg.get("model", ""),
+    }
+    return resolved
+
+
 def _validate_configs(config: dict) -> tuple[list, list]:
     errors = []
     warnings = []
 
-    required_bot = ["ollama", "chat", "character"]
-    for key in required_bot:
-        if key not in config:
-            errors.append(f"bot_config.yaml: missing '{key}' section")
+    has_llm = "llm" in config
+    has_ollama = "ollama" in config
 
-    if "base_url" not in config.get("ollama", {}):
-        errors.append("bot_config.yaml: ollama.base_url is required")
-    if "model" not in config.get("ollama", {}):
-        errors.append("bot_config.yaml: ollama.model is required")
+    if not has_llm and not has_ollama:
+        errors.append("bot_config.yaml: missing 'llm' or 'ollama' section")
+    elif has_llm:
+        llm = config["llm"]
+        provider = llm.get("provider", "ollama")
+        if provider not in _PROVIDER_DEFAULTS:
+            errors.append(f"bot_config.yaml: llm.provider '{provider}' unknown (use: {', '.join(_PROVIDER_DEFAULTS)})")
+        if provider == "custom" and not llm.get("base_url"):
+            errors.append("bot_config.yaml: llm.base_url is required for provider 'custom'")
+        if provider in ("openai", "openrouter") and not llm.get("api_key"):
+            errors.append(f"bot_config.yaml: llm.api_key is required for provider '{provider}'")
+        if not llm.get("model"):
+            errors.append("bot_config.yaml: llm.model is required")
+    else:
+        if "base_url" not in config.get("ollama", {}):
+            errors.append("bot_config.yaml: ollama.base_url is required")
+        if "model" not in config.get("ollama", {}):
+            errors.append("bot_config.yaml: ollama.model is required")
+
+    if "chat" not in config:
+        errors.append("bot_config.yaml: missing 'chat' section")
+    if "character" not in config:
+        errors.append("bot_config.yaml: missing 'character' section")
     if "system_prompt" not in config.get("character", {}):
         errors.append("bot_config.yaml: character.system_prompt is required")
 
@@ -106,13 +153,15 @@ class _NullStorage:
 
 
 class KuroEngine:
-    def __init__(self, config_path: str = "configs/bot_config.yaml") -> None:
+    def __init__(self, config_path: str = "configs/bot_config.yaml", dry_run: bool = False, voice_override: str | None = None) -> None:
         config_path = os.path.join(
             os.path.dirname(__file__), "..", config_path
         ) if not os.path.isabs(config_path) else config_path
 
         with open(config_path) as f:
             self.config = yaml.safe_load(f)
+
+        self.dry_run = dry_run
 
         errors, warnings = _validate_configs(self.config)
         if errors:
@@ -124,38 +173,62 @@ class KuroEngine:
         for w in warnings:
             logger.warning("  - %s", w)
 
-        self.client = OpenAI(
-            base_url=self.config["ollama"]["base_url"],
-            api_key=self.config["ollama"]["api_key"],
-        )
+        llm_cfg = _resolve_llm_config(self.config)
 
-        self.model_name = self.config["ollama"]["model"]
-        self.context_length = self.config["chat"]["context_length"]
-        self.character_name = self.config["character"]["name"]
-        self.base_system_prompt = self.config["character"]["system_prompt"]
-        self.user_id = self.config["chat"]["user_id"]
+        self.model_name = llm_cfg["model"]
+        self.extraction_model_name = llm_cfg["extraction_model"]
+
+        if dry_run:
+            logger.info("DRY RUN — skipping LLM and database initialization")
+            self.client = None
+            self.extraction_client = None
+            self.storage = _NullStorage()
+            self.user_memory = UserMemory(self.storage, user_id=self.config.get("chat", {}).get("user_id", "default_user"))
+            self.db_available = False
+            self.tts_enabled = False
+        else:
+            self.client = OpenAI(
+                base_url=llm_cfg["base_url"],
+                api_key=llm_cfg["api_key"],
+            )
+
+            if llm_cfg["extraction_model"] != llm_cfg["model"]:
+                self.extraction_client = OpenAI(
+                    base_url=llm_cfg["base_url"],
+                    api_key=llm_cfg["api_key"],
+                )
+            else:
+                self.extraction_client = self.client
+
+            db_config_path = os.path.join(
+                os.path.dirname(__file__), "..", "configs", "database_config.yaml"
+            )
+            try:
+                self.storage = MySQLConversationStorage(db_config_path)
+                self.user_memory = UserMemory(self.storage, user_id=self.config.get("chat", {}).get("user_id", "default_user"))
+                self.db_available = True
+            except Exception as e:
+                logger.warning("Database unavailable (%s) — running without persistence", e)
+                self.storage = _NullStorage()
+                self.user_memory = UserMemory(self.storage, user_id=self.config.get("chat", {}).get("user_id", "default_user"))
+                self.db_available = False
+
+            if self.config.get("tts", {}).get("enabled", True):
+                self.tts_enabled = check_api_available()
+            else:
+                self.tts_enabled = False
+
+        self.context_length = self.config.get("chat", {}).get("context_length", 15)
+        self.character_name = self.config.get("character", {}).get("name", "Kuro")
+        self.base_system_prompt = self.config.get("character", {}).get("system_prompt", "")
+        self.user_id = self.config.get("chat", {}).get("user_id", "default_user")
 
         self._tts_lock = threading.Lock()
 
-        db_config_path = os.path.join(
-            os.path.dirname(__file__), "..", "configs", "database_config.yaml"
-        )
-        try:
-            self.storage = MySQLConversationStorage(db_config_path)
-            self.user_memory = UserMemory(self.storage, user_id=self.user_id)
-            self.db_available = True
-        except Exception as e:
-            logger.warning("Database unavailable (%s) — running without persistence", e)
-            self.storage = _NullStorage()
-            self.user_memory = UserMemory(self.storage, user_id=self.user_id)
-            self.db_available = False
+        if voice_override and not dry_run:
+            tts_set_voice(voice_override)
 
-        if self.config.get("tts", {}).get("enabled", True):
-            self.tts_enabled = check_api_available()
-        else:
-            self.tts_enabled = False
-
-        logger.info("KuroEngine initialized (TTS: %s)", "on" if self.tts_enabled else "off")
+        logger.info("KuroEngine initialized (dry_run=%s, TTS: %s)", dry_run, getattr(self, "tts_enabled", False))
 
     # ------------------------------------------------------------------ #
     #  Session management                                                 #
@@ -212,52 +285,61 @@ class KuroEngine:
     # ------------------------------------------------------------------ #
 
     def process_message(self, user_input: str, session_id: str) -> dict:
-        self.storage.add_message(
-            session_id=session_id,
-            role="user",
-            content=user_input,
-            metadata={"timestamp": datetime.now().isoformat()},
-        )
-
-        recent = self.storage.get_recent_context(session_id, self.context_length)
-        messages = [{"role": m["role"], "content": m["content"]} for m in recent]
-
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
+        if not self.dry_run:
+            self.storage.add_message(
+                session_id=session_id,
+                role="user",
+                content=user_input,
+                metadata={"timestamp": datetime.now().isoformat()},
             )
-            raw_reply = response.choices[0].message.content
-            kuro_reply = _strip_think_tags(raw_reply)
-        except Exception as e:
-            logger.error("Ollama error: %s", e)
-            raise
 
-        if self.tts_enabled:
+        if self.dry_run:
+            logger.info("[DRY RUN] Would call LLM with: %s", user_input[:80])
+            kuro_reply = f"[DRY RUN] Kuro would respond to: {user_input[:60]}"
+        else:
+            recent = self.storage.get_recent_context(session_id, self.context_length)
+            messages = [{"role": m["role"], "content": m["content"]} for m in recent]
+
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                )
+                raw_reply = response.choices[0].message.content
+                kuro_reply = _strip_think_tags(raw_reply)
+            except Exception as e:
+                logger.error("LLM error: %s", e)
+                raise
+
+        mood, emotion = self._compute_character_state(user_input, kuro_reply)
+
+        if self.tts_enabled and not self.dry_run:
             try:
                 with self._tts_lock:
-                    speak(kuro_reply)
+                    speak(kuro_reply, mood=mood)
             except Exception as e:
                 logger.error("TTS error: %s", e)
 
         self._extract_user_info(user_input, kuro_reply)
-        mood, emotion = self._compute_character_state(user_input, kuro_reply)
 
-        self.storage.add_message(
-            session_id=session_id,
-            role="assistant",
-            content=kuro_reply,
-            metadata={
-                "model": self.model_name,
-                "timestamp": datetime.now().isoformat(),
-            },
-        )
-        self.storage.update_character_state(
-            session_id=session_id,
-            mood=mood,
-            emotion_level=emotion,
-            context_summary=f"Topic: {user_input[:50]}...",
-        )
+        self.user_memory.flush()
+
+        if not self.dry_run:
+            self.storage.add_message(
+                session_id=session_id,
+                role="assistant",
+                content=kuro_reply,
+                metadata={
+                    "model": self.model_name,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+            self.storage.update_character_state(
+                session_id=session_id,
+                mood=mood,
+                emotion_level=emotion,
+                context_summary=f"Topic: {user_input[:50]}...",
+            )
 
         return {
             "text": kuro_reply,
@@ -335,6 +417,76 @@ class KuroEngine:
     # ------------------------------------------------------------------ #
 
     def _extract_user_info(self, user_input: str, ai_response: str) -> None:
+        extraction_enabled = self.config.get("llm", {}).get("extraction_enabled", True)
+        if extraction_enabled and self.extraction_client is not None:
+            if self._extract_user_info_llm(user_input):
+                return
+        self._extract_user_info_regex(user_input)
+
+    _EXTRACTION_PROMPT = (
+        "Extract any personal information the user shared in this message. "
+        "Return ONLY valid JSON with any of these fields that apply:\n"
+        '{"name": "...", "favorite_food": "...", "favorite_color": "...",\n'
+        ' "favorite_character": "...", "favorite_character_from": "...",\n'
+        ' "hobbies": ["..."], "media_interests": ["..."], "other_facts": ["..."]}\n'
+        "If nothing to extract, return {}\n\nMessage: {text}"
+    )
+
+    def _extract_user_info_llm(self, user_input: str) -> bool:
+        try:
+            response = self.extraction_client.chat.completions.create(
+                model=self.extraction_model_name,
+                messages=[
+                    {"role": "system", "content": "You are a data extraction assistant. Extract structured info from user messages. Return only JSON."},
+                    {"role": "user", "content": self._EXTRACTION_PROMPT.format(text=user_input)},
+                ],
+                temperature=0.1,
+            )
+            raw = response.choices[0].message.content.strip()
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw)
+            data = json.loads(raw)
+        except Exception:
+            return False
+
+        if not data or not isinstance(data, dict):
+            return False
+
+        found = False
+        if data.get("name"):
+            self.user_memory.add_personal_info("name", data["name"])
+            logger.info("LLM extracted: name=%s", data["name"])
+            found = True
+        if data.get("favorite_food"):
+            self.user_memory.add_preference("favorite_food", data["favorite_food"])
+            logger.info("LLM extracted: favorite_food=%s", data["favorite_food"])
+            found = True
+        if data.get("favorite_color"):
+            self.user_memory.add_preference("favorite_color", data["favorite_color"])
+            logger.info("LLM extracted: favorite_color=%s", data["favorite_color"])
+            found = True
+        if data.get("favorite_character"):
+            source = data.get("favorite_character_from", "unknown")
+            ctx = f"from {source}" if source and source != "unknown" else None
+            self.user_memory.add_preference("favorite_character", data["favorite_character"], ctx)
+            logger.info("LLM extracted: favorite_character=%s", data["favorite_character"])
+            found = True
+        for hobby in data.get("hobbies", []):
+            self.user_memory.add_fact(f"Enjoys {hobby}")
+            logger.info("LLM extracted: hobby=%s", hobby)
+            found = True
+        for media in data.get("media_interests", []):
+            self.user_memory.add_fact(f"Interested in {media}")
+            logger.info("LLM extracted: media=%s", media)
+            found = True
+        for fact in data.get("other_facts", []):
+            self.user_memory.add_fact(fact)
+            logger.info("LLM extracted: fact=%s", fact)
+            found = True
+
+        return found
+
+    def _extract_user_info_regex(self, user_input: str) -> None:
         user_lower = user_input.lower()
 
         context_match = _CONTEXT_PATTERN.search(user_lower)
