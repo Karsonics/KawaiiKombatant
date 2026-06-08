@@ -36,3 +36,16 @@ character:
 
 tts:
   enabled: true
+  mode: "per_mood"
+  manual_backend: "gpt_sovits"
+  mood_routing:
+    neutral:  "gpt_sovits"
+    curious:  "gpt_sovits"
+    happy:    "f5_tts"
+    excited:  "f5_tts"
+    annoyed:  "f5_tts"
+  backends:
+    gpt_sovits:
+      enabled: true
+    f5_tts:
+      enabled: true

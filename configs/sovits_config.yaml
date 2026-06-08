@@ -67,3 +67,8 @@ output:
   device: null
   auto_play: true
   async_playback: true
+
+f5_tts:
+  base_url: "http://localhost:5050/v1/tts"
+  timeout: 120
+  nfe_steps: 16

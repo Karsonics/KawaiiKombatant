@@ -226,4 +226,121 @@
     [x] avatar/avatar_client.py — KuroAPI WS listener + VTS expression sync
     [x] server/kuro_api.py — mood broadcast to subscribed clients
     [x] bot_main.py — --avatar flag added
-    [x] Updated README with avatar setup + model sources
+     [x] Updated README with avatar setup + model sources
+
+────────────────────────────────────────────────────────────
+  TTS BACKEND ROADMAP
+────────────────────────────────────────────────────────────
+
+[x] GPT-SoVITS v1 (gsv-v2final) — primary backend
+    [x] Mood-based reference audio selection (per-mood clips)
+    [x] Speed/temperature per-mood tuning (happy=faster, annoyed=slower)
+    [x] Config-driven mood mapping in sovits_config.yaml
+    [x] Per-mood reference clips directory: assets/voices/moods/
+
+[x] GPT-SoVITS v2ProPlus — installed but API-mode overhead negates speed gains
+    [x] Updated to latest main (April 2026) — CUDA graph support
+    [x] v2ProPlus weights activated (s2Gv2ProPlus.pth + s1v3.ckpt)
+    [ ] Test with persistent session (WebUI) where CUDA graph persists
+    [ ] Strip API overhead — direct Python library call instead of HTTP
+
+[x] F5-TTS (optimized) — secondary backend for emotional variety
+    [x] Custom FastAPI server on port 5050 (/mnt/storage/f5_tts/)
+    [x] torch.compile enabled (reduce-overhead mode)
+    [x] AOTriton SDPA enabled (TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1)
+    [x] nfe_steps default 16 (halved from 32, 2x faster)
+    [x] cfg_strength 1.0 (was 2.0)
+    [x] AMD patches applied (soundfile instead of torchcodec, DiT case fix)
+    [x] Speed: 0.21x RTF after optimizations (5x real-time)
+    [ ] FP16 conversion blocked — mixed-precision incompatibility (fix later)
+    [ ] Add per-mood reference audio config to f5_tts.py
+    [ ] F5-TTS systemd service for auto-start
+
+[x] Qwen3-TTS — tertiary backend (port 8880, Docker)
+    [x] MIOpen fix attempted (cudnn.enabled=False) — no improvement
+    [x] Flash-attention CK build blocked — needs GPU during Docker build
+    [x] SDPA with AOTriton confirmed as fastest on RDNA4
+    [ ] Upgrade nuraci fork to latest (fix compile_talker API mismatch)
+    [ ] Test torch.compile with fixed API version
+
+[x] Fish Speech S2-Pro — model downloaded, Docker built, OOM on 16GB
+    [x] Imagilux AMD ROCm fork cloned at /mnt/storage/fish_speach_amd_new_test/
+    [x] miopen-conv-fix active (88 conv layers patched)
+    [x] Model: fishaudio/s2-pro (11GB) downloaded
+    [ ] Needs 24GB+ GPU (4B model + KV cache + decoder = ~13GB minimum)
+    [ ] Re-enable when GPU upgraded: docker compose -f compose.yml -f compose.rocm.yml up
+
+[x] Pluggable TTS backend abstraction
+    [x] TTSBackend abstract class (server/process/tts_func/base.py)
+    [x] GPTSovitsBackend (server/process/tts_func/gpt_sovits.py)
+    [x] F5TTSBackend (server/process/tts_func/f5_tts.py)
+    [x] TTS manager with routing (server/process/tts_func/__init__.py)
+    [x] Per-mood routing: neutral/curious→GPT-SoVITS, happy/annoyed/excited→F5-TTS
+    [x] Smart fallback: F5-TTS down → GPT-SoVITS handles all moods
+    [x] Backward-compat shim in sovits_amd.py
+    [x] bot_config.yaml TTS config: mode, mood_routing, backends
+
+[x] Comparative benchmark suite
+    [x] bench_sovits_vs_qwen3.py (tests/) — 27 sentences × 8 categories
+    [x] JSON/CSV/TXT export to benchmark_results/
+    [x] Per-backend + merged comparison
+    [x] Results: GPT-SoVITS v1 0.68x RTF (winner), v2 1.01x, Qwen3 1.67x
+
+[ ] Future TTS models to test (ranked by priority)
+    [ ] ZipVoice (k2-fsa, 123M, Apache 2.0)
+        - Flow-matching, smallest model, Chinese+English
+        - Should be fastest on AMD, <1GB VRAM
+        - pip install zipvoice or clone from GitHub
+    [ ] CosyVoice 3 (FunAudioLLM, 0.5B, Apache 2.0)
+        - Built-in FastAPI server — instant integration
+        - 9 languages + 18 Chinese dialects, streaming 150ms
+        - AMD PR #1280 exists, needs onnxruntime workaround
+        - Test: clone FunAudioLLM/CosyVoice-ttsfrd
+    [ ] VoxCPM2 (openbmb, 2B, Apache 2.0)
+        - Voice design FROM TEXT (no audio needed!) + voice cloning
+        - 30 languages, 48kHz, commercial OK
+        - ~8GB VRAM at bf16 — fits in 16GB
+        - Tokenizer-free diffusion autoregressive
+    [ ] OmniVoice (k2-fsa, ~1B, Apache 2.0)
+        - 600+ languages, RTF 0.025, voice cloning + design
+        - If it works on ROCm → game-changer
+    [ ] GLM-TTS (zai-org, Apache 2.0)
+        - Best WER on benchmarks (0.89), RL emotion control
+        - Streaming, Chinese+English, phoneme control
+    [ ] MOSS-TTS-Nano (OpenMOSS, 0.1B, Apache 2.0)
+        - ONNX version runs on CPU, 48kHz stereo
+        - No GPU needed — useful as fallback
+
+[ ] Productionize TTS stack
+    [ ] F5-TTS systemd service (port 5050, auto-restart)
+    [ ] GPT-SoVITS systemd service (port 9880, auto-restart)
+    [ ] Qwen3-TTS systemd service (Docker auto-restart existing)
+    [ ] Docker Compose for all 3 TTS + Ollama + bot
+    [ ] VRAM budget monitoring (ollama 6GB + GPT-SoVITS 4GB + F5-TTS 3GB = 13GB/16GB)
+    [ ] Health check watchdog per backend
+    [ ] Auto-fallback if any backend goes down
+
+[ ] Emotion/accent reference audio collection
+    [ ] Record/generate 5 Kuro reference clips:
+        [ ] assets/voices/moods/happy.wav
+        [ ] assets/voices/moods/annoyed.wav
+        [ ] assets/voices/moods/excited.wav
+        [ ] assets/voices/moods/curious.wav
+        [ ] assets/voices/moods/neutral.wav
+    [ ] Source options:
+        - Record yourself doing Kuro impressions
+        - Extract from anime VAs on sounds-resource.com
+        - Generate with Fish Speech S2-Pro emotion tags [excited] etc.
+        - Use Qwen3-TTS voice design to generate mood variants
+    [ ] Update sovits_config.yaml mood refs when clips exist
+
+[x] TTS COMPLETED
+    [x] Sentence-streaming TTS (kuro_engine.py _stream_response)
+    [x] Mood system analyzes AI response (not just user input)
+    [x] Dynamic memory injection per-turn
+    [x] Config tweaks: speed_factor 1.0, context=10, summarization=15
+    [x] WS streaming per-sentence (kuro_api.py)
+    [x] Per-mood reference audio selection (GPT-SoVITS)
+    [x] F5-TTS installed, optimized, benchmarked
+    [x] Dual-TTS backend with per-mood routing
+    [x] Comparative benchmark suite

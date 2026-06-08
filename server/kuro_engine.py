@@ -11,9 +11,10 @@ from openai import OpenAI
 
 from server.process.storage.mysql_storage import MySQLConversationStorage
 from server.process.storage.user_memory import UserMemory
-from server.process.tts_func.sovits_amd import (
+from server.process.tts_func import (
+    init_tts,
     speak,
-    check_api_available,
+    check_tts_available,
     set_voice as tts_set_voice,
 )
 from utils.logging import logger
@@ -265,7 +266,8 @@ class KuroEngine:
                 self.db_available = False
 
             if self.config.get("tts", {}).get("enabled", True):
-                self.tts_enabled = check_api_available()
+                init_tts(self.config)
+                self.tts_enabled = check_tts_available()
             else:
                 self.tts_enabled = False
 
