@@ -8,7 +8,6 @@ api:
 reference:
   audio_path: "./assets/voices/megumi_clean.wav"
   audio_text: "For the cost of a meal and basic necessities, you can have the power of an archwizard. Just give me a permanent spot in your party and I'm all yours"
-  # Language: en, ja, zh, etc.
   language: "en"
 
 # Named voice presets (selectable via --voice flag)
@@ -18,28 +17,53 @@ voices:
     audio_text: "For the cost of a meal and basic necessities, you can have the power of an archwizard. Just give me a permanent spot in your party and I'm all yours"
     language: "en"
 
-# Mood-to-emotion tag mapping (used by TTS backends that support emotion)
-# Set empty map for GPT-SoVITS (ignores unknown params)
-emotion:
-  mood_map:
-    happy: "happy"
-    annoyed: "angry"
-    curious: "surprised"
-    excited: "excited"
-    neutral: ""
+# ── Mood-based emotion control via reference audio selection ──────────────────
+# GPT-SoVITS clones the speaker's emotional tone from the reference audio.
+# For each mood, provide a different reference clip of the SAME speaker
+# speaking in THAT emotional tone.  If no per-mood clip exists, the default
+# reference audio is used with speed/temperature tweaks to approximate the mood.
+#
+# To add a mood clip: drop a 3-10 second WAV in assets/voices/moods/
+# and set the path + transcript below.
+moods:
+  neutral:
+    ref_audio: null          # null → use default reference audio
+    ref_text: null
+    speed_factor: 1.0
+    temperature: 1.0
+
+  happy:
+    ref_audio: null          # e.g. "./assets/voices/moods/happy.wav"
+    ref_text: null           # e.g. "Hehe, I'm so happy right now!"
+    speed_factor: 1.1         # slightly faster = energetic
+    temperature: 0.9          # slightly less variation = consistent
+
+  annoyed:
+    ref_audio: null          # e.g. "./assets/voices/moods/annoyed.wav"
+    ref_text: null           # e.g. "Baka! What do you want?!"
+    speed_factor: 0.95        # slightly slower = deliberate, sharp
+    temperature: 1.0
+
+  excited:
+    ref_audio: null
+    ref_text: null
+    speed_factor: 1.15        # faster = bouncy, energetic
+    temperature: 1.0
+
+  curious:
+    ref_audio: null
+    ref_text: null
+    speed_factor: 1.0
+    temperature: 1.0
 
 inference:
-  speed_factor: 1.2
+  speed_factor: 1.0
   top_k: 5
   top_p: 1.0
   temperature: 1.0
 
 output:
   sampling_rate: 44100
-  # Audio output device index (null = system default)
-  # List devices with: python -c "import sounddevice; print(sounddevice.query_devices())"
   device: null
-  # true = play audio, false = only generate
   auto_play: true
-  # true = async playback (non-blocking), false = blocks chat
   async_playback: true

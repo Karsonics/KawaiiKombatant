@@ -19,9 +19,9 @@ ollama:
   model: "qwen2.5:14b"
 
 chat:
-  context_length: 15
+  context_length: 10
   user_id: "default_user"
-  summarization_threshold: 20
+  summarization_threshold: 15
 
 character:
   name: "Kuro"

@@ -43,7 +43,10 @@ TEMPERATURE = CONFIG["inference"]["temperature"]
 TARGET_SR = CONFIG["output"]["sampling_rate"]
 AUDIO_DEVICE = CONFIG["output"].get("device", None)
 ASYNC_PLAYBACK = CONFIG["output"]["async_playback"]
-EMOTION_MAP = CONFIG.get("emotion", {}).get("mood_map", {})
+MOOD_CONFIG = CONFIG.get("moods", {})
+BASE_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..")
+)
 
 _VOICE_OVERRIDE: dict | None = None
 
@@ -100,17 +103,49 @@ def speak(text: str, lang: str = None, mood: str = None) -> bool:
     if lang is None:
         lang = DEFAULT_LANG
 
-    ref_path = _VOICE_OVERRIDE["audio_path"] if _VOICE_OVERRIDE else REF_AUDIO_PATH
-    ref_text = _VOICE_OVERRIDE["audio_text"] if _VOICE_OVERRIDE else REF_AUDIO_TEXT
-    ref_lang = _VOICE_OVERRIDE["language"] if _VOICE_OVERRIDE else lang
+    # ── resolve reference audio (voice override > mood clip > default) ────
+    if _VOICE_OVERRIDE:
+        ref_path = _VOICE_OVERRIDE["audio_path"]
+        ref_text = _VOICE_OVERRIDE["audio_text"]
+        ref_lang = _VOICE_OVERRIDE["language"]
+        speed = SPEED_FACTOR
+        temp = TEMPERATURE
+    else:
+        mood_cfg = MOOD_CONFIG.get(mood, {}) if mood else {}
+        mood_ref = mood_cfg.get("ref_audio")
+        mood_ref_text = mood_cfg.get("ref_text")
+        speed = mood_cfg.get("speed_factor", SPEED_FACTOR)
+        temp = mood_cfg.get("temperature", TEMPERATURE)
 
-    if mood:
-        emotion_tag = EMOTION_MAP.get(mood, "")
-        if emotion_tag:
-            text = f"[{emotion_tag}] {text}"
-            logger.debug("TTS mood: %s → tag: %s", mood, emotion_tag)
+        if mood_ref and mood_ref_text:
+            # Per-mood reference clip — resolve relative path
+            if not os.path.isabs(mood_ref):
+                mood_ref = os.path.abspath(os.path.join(BASE_DIR, mood_ref))
+            if os.path.exists(mood_ref):
+                ref_path = mood_ref
+                ref_text = mood_ref_text
+                ref_lang = lang
+                logger.debug(
+                    "TTS mood '%s' → using reference: %s", mood, os.path.basename(mood_ref)
+                )
+            else:
+                logger.warning(
+                    "TTS mood '%s' reference not found: %s — falling back to default",
+                    mood, mood_ref,
+                )
+                ref_path = REF_AUDIO_PATH
+                ref_text = REF_AUDIO_TEXT
+                ref_lang = lang
         else:
-            logger.debug("TTS mood: %s (no tag mapped)", mood)
+            # No per-mood clip — use default with mood speed/temp tweaks
+            ref_path = REF_AUDIO_PATH
+            ref_text = REF_AUDIO_TEXT
+            ref_lang = lang
+            if mood:
+                logger.debug(
+                    "TTS mood '%s' — using default ref with speed=%.2f temp=%.2f",
+                    mood, speed, temp,
+                )
 
     try:
         params = {
@@ -121,10 +156,10 @@ def speak(text: str, lang: str = None, mood: str = None) -> bool:
             "prompt_lang": ref_lang,
             "media_type": "wav",
             "streaming_mode": "false",
-            "speed_factor": SPEED_FACTOR,
+            "speed_factor": speed,
             "top_k": TOP_K,
             "top_p": TOP_P,
-            "temperature": TEMPERATURE,
+            "temperature": temp,
         }
 
         response = requests.get(

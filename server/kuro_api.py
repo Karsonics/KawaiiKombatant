@@ -50,6 +50,29 @@ async def health():
     }
 
 
+async def _process_with_streaming(
+    engine: KuroEngine, user_input: str, session_id: str, queue: asyncio.Queue
+) -> dict:
+    loop = asyncio.get_running_loop()
+
+    def on_sentence(s: str) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, ("sentence", s))
+
+    def on_done(fut) -> None:
+        try:
+            result = fut.result()
+            loop.call_soon_threadsafe(queue.put_nowait, ("result", result))
+        except Exception as e:
+            loop.call_soon_threadsafe(queue.put_nowait, ("error", e))
+
+    fut = loop.run_in_executor(
+        None,
+        lambda: engine.process_message(user_input, session_id, sentence_callback=on_sentence),
+    )
+    fut.add_done_callback(on_done)
+    return await fut
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
     await ws.accept()
@@ -71,11 +94,24 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 if not session_id:
                     session_id = msg.get("session_id") or engine.create_session()
 
-                loop = asyncio.get_running_loop()
+                queue: asyncio.Queue = asyncio.Queue()
+
                 try:
-                    result = await loop.run_in_executor(
-                        None, engine.process_message, user_input, session_id
+                    result_fut = asyncio.ensure_future(
+                        _process_with_streaming(engine, user_input, session_id, queue)
                     )
+
+                    # Stream sentences as they arrive
+                    while True:
+                        typ, payload = await queue.get()
+                        if typ == "sentence":
+                            await ws.send_json({"type": "chunk", "data": payload})
+                        elif typ == "result":
+                            result = payload
+                            break
+                        elif typ == "error":
+                            raise payload
+
                     session_id = result["session_id"]
                     await ws.send_json({"type": "done", "data": result})
                     await _broadcast_mood(result["mood"], result.get("emotion", 0.5))
@@ -118,10 +154,23 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     await ws.send_json({"type": "error", "data": "No speech detected"})
                     continue
 
+                queue: asyncio.Queue = asyncio.Queue()
+
                 try:
-                    result = await loop.run_in_executor(
-                        None, engine.process_message, text, session_id
+                    result_fut = asyncio.ensure_future(
+                        _process_with_streaming(engine, text, session_id, queue)
                     )
+
+                    while True:
+                        typ, payload = await queue.get()
+                        if typ == "sentence":
+                            await ws.send_json({"type": "chunk", "data": payload})
+                        elif typ == "result":
+                            result = payload
+                            break
+                        elif typ == "error":
+                            raise payload
+
                     session_id = result["session_id"]
                     await ws.send_json({"type": "done", "data": result})
                     await _broadcast_mood(result["mood"], result.get("emotion", 0.5))

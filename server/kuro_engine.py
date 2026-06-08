@@ -4,6 +4,7 @@ import uuid
 import os
 import threading
 from datetime import datetime
+from typing import Generator
 
 import yaml
 from openai import OpenAI
@@ -56,6 +57,7 @@ _HOBBY_PATTERNS = [
     re.compile(r"i'm into (.+?)(?:\.|$|,)", re.IGNORECASE),
 ]
 
+_SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+')
 _THINK_TAG_PATTERN = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
@@ -291,12 +293,10 @@ class KuroEngine:
 
     def create_session(self) -> str:
         session_id = str(uuid.uuid4())
-        memory_context = self.user_memory.build_context_prompt()
-        full_prompt = self.base_system_prompt + "\n" + memory_context
         self.storage.add_message(
             session_id=session_id,
             role="system",
-            content=full_prompt,
+            content=self.base_system_prompt,
             metadata={
                 "character": self.character_name,
                 "personality": self.config["character"]["personality"],
@@ -341,7 +341,25 @@ class KuroEngine:
     #  Core interaction                                                    #
     # ------------------------------------------------------------------ #
 
-    def process_message(self, user_input: str, session_id: str) -> dict:
+    def _stream_response(self, messages: list[dict]) -> Generator[str, None, None]:
+        buffer = ""
+        stream = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            buffer += delta
+            parts = _SENTENCE_SPLIT.split(buffer)
+            for sentence in parts[:-1]:
+                if sentence.strip():
+                    yield sentence.strip()
+            buffer = parts[-1]
+        if buffer.strip():
+            yield buffer.strip()
+
+    def process_message(self, user_input: str, session_id: str, sentence_callback=None) -> dict:
         if not self.dry_run:
             self.storage.add_message(
                 session_id=session_id,
@@ -353,42 +371,43 @@ class KuroEngine:
         if self.dry_run:
             logger.info("[DRY RUN] Would call LLM with: %s", user_input[:80])
             kuro_reply = f"[DRY RUN] Kuro would respond to: {user_input[:60]}"
+            mood, emotion = "neutral", 0.5
         else:
             recent = self.storage.get_recent_context(session_id, self.context_length)
             messages = [{"role": m["role"], "content": m["content"]} for m in recent]
+            memory_context = self.user_memory.build_context_prompt()
             summary = self.user_memory.get_summary()
+            if memory_context:
+                messages.insert(0, {"role": "system", "content": memory_context})
             if summary:
-                messages.insert(
-                    0,
-                    {
-                        "role": "system",
-                        "content": f"[Conversation Summary: {summary}]",
-                    },
-                )
+                messages.insert(0, {"role": "system", "content": f"[Conversation Summary: {summary}]"})
 
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                )
-                raw_reply = response.choices[0].message.content
-                kuro_reply = _strip_think_tags(raw_reply)
+                kuro_reply_parts = []
+                mood, emotion = "neutral", 0.5
+                for i, sentence in enumerate(self._stream_response(messages)):
+                    cleaned = _strip_think_tags(sentence)
+                    if not cleaned:
+                        continue
+                    if i == 0:
+                        mood, emotion = self._compute_character_state(user_input, cleaned)
+                    if self.tts_enabled:
+                        try:
+                            with self._tts_lock:
+                                speak(cleaned, mood=mood)
+                        except Exception as e:
+                            logger.error("TTS error: %s", e)
+                    kuro_reply_parts.append(cleaned)
+                    if sentence_callback:
+                        sentence_callback(cleaned)
+                kuro_reply = " ".join(kuro_reply_parts)
+                mood, emotion = self._compute_character_state(user_input, kuro_reply)
             except Exception as e:
                 logger.error("LLM error: %s", e)
                 raise
 
-        mood, emotion = self._compute_character_state(user_input, kuro_reply)
         self.user_memory.set_mood(mood, emotion)
-
-        if self.tts_enabled and not self.dry_run:
-            try:
-                with self._tts_lock:
-                    speak(kuro_reply, mood=mood)
-            except Exception as e:
-                logger.error("TTS error: %s", e)
-
         self._extract_user_info(user_input, kuro_reply)
-
         self.user_memory.flush()
 
         if not self.dry_run:
@@ -663,56 +682,22 @@ class KuroEngine:
     def _compute_character_state(
         user_input: str, ai_response: str
     ) -> tuple[str, float]:
-        user_lower = user_input.lower()
+        resp_lower = ai_response.lower()
 
-        positive_words = {
-            "thanks",
-            "love",
-            "great",
-            "happy",
-            "fun",
-            "amazing",
-            "good",
-            "nice",
-            "wonderful",
-            "awesome",
-            "cool",
-            "best",
-            "fantastic",
-        }
-        negative_words = {
-            "hate",
-            "sad",
-            "angry",
-            "bad",
-            "terrible",
-            "awful",
-            "horrible",
-            "worst",
-            "ugly",
-            "stupid",
-            "annoying",
-        }
+        tsundere_denial = {"baka", "hmph", "it's not like", "don't get", "whatever", "shut up", "stupid", "idiot"}
+        happy_signals = {"hehe", "~", "happy", "glad", "nice", "wag", "tail", "ears", "fun", "cute"}
+        user_anger = {"hate", "angry", "mad", "annoyed", "terrible", "awful"}
 
-        words = set(user_lower.split())
-        pos_score = len(words & positive_words)
-        neg_score = len(words & negative_words)
+        if any(w in resp_lower for w in tsundere_denial):
+            return "annoyed", 0.6
+        if any(w in resp_lower for w in happy_signals):
+            return "happy", 0.8
+        if "?" in resp_lower:
+            return "curious", 0.6
+        if "!" in resp_lower:
+            return "excited", 0.7
 
-        if user_lower.endswith("!"):
-            mood = "excited"
-            emotion = 0.8
-        elif "?" in user_lower:
-            mood = "curious"
-            emotion = 0.6
-        elif pos_score > neg_score:
-            mood = "happy"
-            emotion = 0.7 + (pos_score * 0.05)
-        elif neg_score > pos_score:
-            mood = "annoyed"
-            emotion = 0.3 - (neg_score * 0.05)
-        else:
-            mood = "neutral"
-            emotion = 0.5
+        if any(w in user_input.lower() for w in user_anger):
+            return "annoyed", 0.4
 
-        emotion = max(0.0, min(1.0, emotion))
-        return mood, round(emotion, 2)
+        return "neutral", 0.5
