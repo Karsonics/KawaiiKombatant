@@ -334,6 +334,14 @@
         - Use Qwen3-TTS voice design to generate mood variants
     [ ] Update sovits_config.yaml mood refs when clips exist
 
+[ ] GPT-SoVITS few-shot fine-tuning (SEE: docs/VOICE_TRAINING_GUIDE.md)
+    [ ] Record 1-5 min of Kuro voice training data
+    [ ] Run WebUI training pipeline (UVR5 → slice → ASR → train)
+    [ ] Train SoVITS (~20 min) + GPT (~15 min) on 9060 XT
+    [ ] Per-mood models: neutral, happy, annoyed, excited models
+    [ ] Wire per-mood models into TTS manager (mood → model routing)
+    [ ] Switch from zero-shot to fine-tuned in sovits_config.yaml
+
 [x] TTS COMPLETED
     [x] Sentence-streaming TTS (kuro_engine.py _stream_response)
     [x] Mood system analyzes AI response (not just user input)
