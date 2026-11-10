@@ -11,6 +11,14 @@ llm:
   model: "qwen2.5:14b"
   extraction_model: "qwen2.5:0.5b"
   extraction_enabled: true
+  # Optional generation controls. Omit a value to use the model server's default.
+  temperature: 0.7
+  top_p: 0.9
+  max_tokens: 512
+  # Provider-specific OpenAI-compatible request fields (e.g. Ollama options).
+  # Keep empty unless the selected provider/model documents the option.
+  # extra_body:
+  #   think: false
 
 # OLD ollama format (still works, overridden by llm: if present)
 ollama:
