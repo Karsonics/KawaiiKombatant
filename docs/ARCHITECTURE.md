@@ -12,6 +12,7 @@ Scope: incremental refactor of the existing Python application; not a rewrite.
 
 ## Current implementation (observed)
 - KuroEngine currently coordinates provider calls, history, memory extraction, mood calculation, summarization and TTS.
+- An initial LLM boundary already exists in `server/llm/base.py` and `server/llm/openai_compatible.py`; KuroEngine uses this adapter. This is a first extraction, not yet a fully tested provider lifecycle or capability abstraction.
 - LLM streaming is synchronous and is run through an executor by the WebSocket API.
 - TTS synthesis/playback is invoked inline while the engine consumes LLM sentences. The TTS manager and engine use thread locks.
 - The FastAPI module constructs a global KuroEngine during import.
