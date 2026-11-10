@@ -1,17 +1,12 @@
 import unittest
 
 
+@unittest.skip("Placeholder: add backend contract tests with a fake TTS service.")
 class TestTTS(unittest.TestCase):
-    def setUp(self):
-        # Setup code that runs before each test
-        pass
-
     def test_voice_generation(self):
-        # Test voice generation
         pass
 
     def test_audio_output(self):
-        # Test audio output quality
         pass
 
 
