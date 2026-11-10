@@ -527,6 +527,8 @@ class KuroEngine:
 
     def close(self) -> None:
         self.storage.close()
+        if self.llm_provider is not None:
+            self.llm_provider.close()
         logger.info("KuroEngine closed")
 
     # ------------------------------------------------------------------ #
