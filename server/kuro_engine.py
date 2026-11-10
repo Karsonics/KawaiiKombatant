@@ -91,6 +91,10 @@ def _resolve_llm_config(config: dict) -> dict:
         "api_key": llm_cfg.get("api_key") or defaults["api_key"],
         "model": llm_cfg.get("model", ""),
         "extraction_model": llm_cfg.get("extraction_model") or llm_cfg.get("model", ""),
+        "temperature": llm_cfg.get("temperature"),
+        "top_p": llm_cfg.get("top_p"),
+        "max_tokens": llm_cfg.get("max_tokens"),
+        "extra_body": llm_cfg.get("extra_body") or {},
     }
     return resolved
 
@@ -345,11 +349,20 @@ class KuroEngine:
 
     def _stream_response(self, messages: list[dict]) -> Generator[str, None, None]:
         buffer = ""
-        stream = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            stream=True,
-        )
+        llm_cfg = _resolve_llm_config(self.config)
+        request_options = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": True,
+        }
+        for option in ("temperature", "top_p", "max_tokens"):
+            value = llm_cfg.get(option)
+            if value is not None:
+                request_options[option] = value
+        if llm_cfg["extra_body"]:
+            request_options["extra_body"] = llm_cfg["extra_body"]
+
+        stream = self.client.chat.completions.create(**request_options)
         for chunk in stream:
             delta = chunk.choices[0].delta.content or ""
             buffer += delta
