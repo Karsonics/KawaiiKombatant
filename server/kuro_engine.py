@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Generator
 
 import yaml
-from openai import OpenAI
+from server.llm import OpenAICompatibleProvider
 
 from server.process.storage.mysql_storage import MySQLConversationStorage
 from server.process.storage.user_memory import UserMemory
@@ -225,8 +225,7 @@ class KuroEngine:
 
         if dry_run:
             logger.info("DRY RUN — skipping LLM and database initialization")
-            self.client = None
-            self.extraction_client = None
+            self.llm_provider = None
             self.storage = _NullStorage()
             self.user_memory = UserMemory(
                 self.storage,
@@ -235,18 +234,10 @@ class KuroEngine:
             self.db_available = False
             self.tts_enabled = False
         else:
-            self.client = OpenAI(
+            self.llm_provider = OpenAICompatibleProvider(
                 base_url=llm_cfg["base_url"],
                 api_key=llm_cfg["api_key"],
             )
-
-            if llm_cfg["extraction_model"] != llm_cfg["model"]:
-                self.extraction_client = OpenAI(
-                    base_url=llm_cfg["base_url"],
-                    api_key=llm_cfg["api_key"],
-                )
-            else:
-                self.extraction_client = self.client
 
             db_config_path = os.path.join(
                 os.path.dirname(__file__), "..", "configs", "database_config.yaml"
@@ -350,22 +341,13 @@ class KuroEngine:
     def _stream_response(self, messages: list[dict]) -> Generator[str, None, None]:
         buffer = ""
         llm_cfg = _resolve_llm_config(self.config)
-        request_options = {
-            "model": self.model_name,
-            "messages": messages,
-            "stream": True,
-        }
-        for option in ("temperature", "top_p", "max_tokens"):
-            value = llm_cfg.get(option)
-            if value is not None:
-                request_options[option] = value
-        if llm_cfg["extra_body"]:
-            request_options["extra_body"] = llm_cfg["extra_body"]
-
-        stream = self.client.chat.completions.create(**request_options)
-        for chunk in stream:
-            delta = chunk.choices[0].delta.content or ""
-            buffer += delta
+        stream = self.llm_provider.stream_chat(
+            model=self.model_name,
+            messages=messages,
+            options=llm_cfg,
+        )
+        for fragment in stream:
+            buffer += fragment
             parts = _SENTENCE_SPLIT.split(buffer)
             for sentence in parts[:-1]:
                 if sentence.strip():
@@ -524,7 +506,7 @@ class KuroEngine:
             return
         text = "\n".join(f"{m['role']}: {m['content']}" for m in history)
         try:
-            response = self.client.chat.completions.create(
+            summary = self.llm_provider.complete_chat(
                 model=self.extraction_model_name or self.model_name,
                 messages=[
                     {
@@ -533,9 +515,8 @@ class KuroEngine:
                     },
                     {"role": "user", "content": text},
                 ],
-                temperature=0.3,
-            )
-            summary = response.choices[0].message.content.strip()
+                options={"temperature": 0.3},
+            ).strip()
             summary = _strip_think_tags(summary)
             self.user_memory.set_summary(summary)
             logger.info(
@@ -554,7 +535,7 @@ class KuroEngine:
 
     def _extract_user_info(self, user_input: str, ai_response: str) -> None:
         extraction_enabled = self.config.get("llm", {}).get("extraction_enabled", True)
-        if extraction_enabled and self.extraction_client is not None:
+        if extraction_enabled and self.llm_provider is not None:
             if self._extract_user_info_llm(user_input):
                 return
         self._extract_user_info_regex(user_input)
@@ -570,7 +551,7 @@ class KuroEngine:
 
     def _extract_user_info_llm(self, user_input: str) -> bool:
         try:
-            response = self.extraction_client.chat.completions.create(
+            raw = self.llm_provider.complete_chat(
                 model=self.extraction_model_name,
                 messages=[
                     {
@@ -582,9 +563,8 @@ class KuroEngine:
                         "content": self._EXTRACTION_PROMPT.format(text=user_input),
                     },
                 ],
-                temperature=0.1,
-            )
-            raw = response.choices[0].message.content.strip()
+                options={"temperature": 0.1},
+            ).strip()
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
             data = json.loads(raw)
