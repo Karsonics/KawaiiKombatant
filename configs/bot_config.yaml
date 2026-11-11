@@ -31,6 +31,10 @@ chat:
   user_id: "default_user"
   summarization_threshold: 15
 
+# Explicit path to the Markdown long-term memory vault. No default is used.
+memory:
+  vault_path: ""
+
 character:
   name: "Kuro"
   personality: "tsundere"

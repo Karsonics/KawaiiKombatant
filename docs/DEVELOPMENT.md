@@ -28,19 +28,21 @@ The engine expects local MySQL settings at `configs/database_config.yaml`; this 
 
 ### Standalone Markdown memory store
 
-`server.process.storage.markdown_memory.MarkdownMemoryStore` is currently a standalone storage component, not used by the live chat engine. It has no implicit default vault path or repository configuration setting. Pass an explicit path outside the engineering repository, then call `initialize_vault()`; call `initialize_user(user_id)` to create that user's folders. Obsidian is optional: the files are ordinary Markdown and can be inspected or edited with any text editor. Kuro runtime memory remains in MySQL until a separately approved integration/migration.
+Set `memory.vault_path` in `configs/bot_config.yaml` to an explicit absolute
+path before enabling the Markdown vault. The checked-in value is empty and no
+fallback is used. At startup Kuro initializes the configured vault and its one
+effective `chat.user_id`; if the setting is omitted, the existing
+`default_user` fallback is used. Explicitly supplied invalid user IDs fail
+configuration validation. If the vault path is absent, blank, relative, or
+inaccessible, chat starts in degraded mode and reports that long-term Markdown
+memory is unavailable without including the configured path in the status. The
+server health response includes `long_term_memory` status.
 
-Example against a deliberate development-only path:
-
-```python
-from server.process.storage.markdown_memory import MarkdownMemoryStore
-
-store = MarkdownMemoryStore(r"D:\KuroMemory-dev")
-store.initialize_vault()
-store.initialize_user("default_user")
-```
-
-Choose and protect the path yourself; do not point it at `docs/` or a personal vault containing unrelated notes. The component does not support cross-process write coordination.
+The store does not yet participate in retrieval, capture, session summaries,
+or legacy MySQL import. Existing live memory behavior remains MySQL-backed.
+Obsidian is optional, and the storage component does not support cross-process
+write coordination. Never use an engineering documentation directory or a
+personal vault containing unrelated notes as the memory path.
 
 Do not put secrets into tracked files. Inspect `.gitignore` before adding local configuration, and do not share configuration contents or logs without checking them for credentials and user data.
 

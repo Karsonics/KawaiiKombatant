@@ -10,6 +10,16 @@ python -m pytest tests/test_markdown_memory.py -q
 
 They use pytest temporary directories and synthetic content. They do not need MySQL, Ollama, GPU, audio services, Obsidian, or network access. They cover validation, CRUD/filtering, user isolation, malformed files, version conflicts, and simulated atomic-write failures. The suite does not prove cross-process safety or every operating-system permission behavior.
 
+Startup-boundary tests use only temporary paths and fakes:
+
+```bash
+python -m pytest tests/test_markdown_memory_startup.py -q
+```
+
+The API health tests register the production async health handler with the
+route-registration helper and invoke the registered callable using a fake app.
+They verify handler behavior, not full FastAPI HTTP or ASGI dispatch.
+
 The repository's standard test command is:
 
 ```bash

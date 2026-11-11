@@ -58,6 +58,16 @@ All settings live in `configs/`:
 | `character_config.yaml` | Personality presets (tsundere, kuudere, default) |
 | `presets/` | Detailed personality profile files |
 
+`memory.vault_path` in `bot_config.yaml` is an explicit, absolute path for the
+Markdown long-term memory vault. It has no default; leave it empty to keep
+Markdown memory unavailable. At startup Kuro initializes only the configured
+vault and the effective single user identity. If the path is missing, invalid,
+or unavailable, chat continues and the server health response reports long-term
+memory as unavailable. Conversation transcripts and session data remain in
+MySQL; this setting does not yet connect Markdown memory to chat retrieval or
+capture. Kuro uses the effective single identity from `chat.user_id`, defaulting
+to `default_user` when omitted; explicitly supplied IDs are validated.
+
 ### Changing the Character
 
 Edit `configs/bot_config.yaml`:

@@ -1,6 +1,7 @@
+import asyncio
 from pathlib import Path
 
-from server.api_routes import register_api_routes
+from server.api_routes import create_health_handler, register_api_routes
 
 
 class FakeApp:
@@ -37,7 +38,61 @@ class FakeLogger:
         self.infos.append((message, args))
 
 
-def _register(web_dir: Path):
+class FakeHealthEngine:
+    def __init__(self, memory_status, vault_path):
+        self.markdown_memory_status = memory_status
+        self.markdown_memory = object()
+        self.vault_path = vault_path
+        self.memory_contents = "private memory text"
+        self.tts_enabled = True
+
+    def get_session_count(self):
+        return 3
+
+
+def test_registered_health_endpoint_reports_available_memory_privately(tmp_path):
+    vault_path = "C:/private/KuroMemory"
+    engine = FakeHealthEngine("available", vault_path)
+    health_handler = create_health_handler(lambda: engine)
+    app, _, handlers = _register(tmp_path / "missing-web", health_handler)
+
+    assert app.routes[("GET", "/health")] is health_handler
+    assert handlers["health"] is health_handler
+    payload = asyncio.run(app.routes[("GET", "/health")]())
+
+    assert payload == {
+        "status": "ok",
+        "sessions": 3,
+        "tts_enabled": True,
+        "long_term_memory": "available",
+    }
+    assert vault_path not in repr(payload)
+    assert engine.memory_contents not in repr(payload)
+
+
+def test_registered_health_endpoint_reports_unavailable_memory_privately(tmp_path):
+    vault_path = "C:/private/KuroMemory"
+    engine = FakeHealthEngine(
+        "unavailable: configured vault cannot be initialized", vault_path
+    )
+    health_handler = create_health_handler(lambda: engine)
+    app, _, handlers = _register(tmp_path / "missing-web", health_handler)
+
+    assert app.routes[("GET", "/health")] is health_handler
+    assert handlers["health"] is health_handler
+    payload = asyncio.run(app.routes[("GET", "/health")]())
+
+    assert payload == {
+        "status": "ok",
+        "sessions": 3,
+        "tts_enabled": True,
+        "long_term_memory": "unavailable: configured vault cannot be initialized",
+    }
+    assert vault_path not in repr(payload)
+    assert engine.memory_contents not in repr(payload)
+
+
+def _register(web_dir: Path, health_handler=None):
     app = FakeApp()
     logger = FakeLogger()
     handlers = {
@@ -46,6 +101,8 @@ def _register(web_dir: Path):
         "health": object(),
         "websocket": object(),
     }
+    if health_handler is not None:
+        handlers["health"] = health_handler
 
     register_api_routes(
         app,

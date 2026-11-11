@@ -10,7 +10,7 @@ import uvicorn
 
 from server.kuro_engine import KuroEngine
 from server.api_listener import parse_api_server_args
-from server.api_routes import register_api_routes
+from server.api_routes import create_health_handler, register_api_routes
 from server.process.asr_func.asr_push_to_talk import transcribe_bytes as asr_transcribe
 from utils.logging import logger
 
@@ -35,12 +35,7 @@ async def shutdown():
     engine.close()
 
 
-async def health():
-    return {
-        "status": "ok",
-        "sessions": engine.get_session_count(),
-        "tts_enabled": engine.tts_enabled,
-    }
+health = create_health_handler(lambda: engine)
 
 
 async def _process_with_streaming(

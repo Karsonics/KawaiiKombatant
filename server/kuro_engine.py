@@ -11,6 +11,10 @@ from server.llm import OpenAICompatibleProvider
 
 from server.process.storage.mysql_storage import MySQLConversationStorage
 from server.process.storage.user_memory import UserMemory
+from server.process.storage.markdown_memory_startup import (
+    initialize_markdown_memory,
+    validate_user_id,
+)
 from server.process.tts_func import (
     init_tts,
     speak,
@@ -133,6 +137,13 @@ def _validate_configs(config: dict) -> tuple[list, list]:
 
     if "chat" not in config:
         errors.append("bot_config.yaml: missing 'chat' section")
+    elif not isinstance(config.get("chat"), dict) or not validate_user_id(
+        config["chat"].get("user_id", "default_user")
+    ):
+        errors.append(
+            "bot_config.yaml: chat.user_id must be 1-64 letters, numbers, "
+            "'_' or '-' and start with a letter or number"
+        )
     if "character" not in config:
         errors.append("bot_config.yaml: missing 'character' section")
     if "system_prompt" not in config.get("character", {}):
@@ -215,8 +226,22 @@ class KuroEngine:
                 logger.error("  - %s", e)
             raise RuntimeError("Configuration validation failed")
 
+        user_id = self.config["chat"].get("user_id", "default_user")
+
         for w in warnings:
             logger.warning("  - %s", w)
+
+        if dry_run:
+            self.markdown_memory = None
+            self.markdown_memory_status = "unavailable: skipped in dry-run"
+        else:
+            memory_startup = initialize_markdown_memory(
+                self.config, effective_user_id=user_id
+            )
+            self.markdown_memory = memory_startup.store
+            self.markdown_memory_status = memory_startup.status
+            if not memory_startup.available:
+                logger.warning("Long-term Markdown memory %s", memory_startup.status)
 
         llm_cfg = _resolve_llm_config(self.config)
 
@@ -229,7 +254,7 @@ class KuroEngine:
             self.storage = _NullStorage()
             self.user_memory = UserMemory(
                 self.storage,
-                user_id=self.config.get("chat", {}).get("user_id", "default_user"),
+                user_id=user_id,
             )
             self.db_available = False
             self.tts_enabled = False
@@ -246,7 +271,7 @@ class KuroEngine:
                 self.storage = MySQLConversationStorage(db_config_path)
                 self.user_memory = UserMemory(
                     self.storage,
-                    user_id=self.config.get("chat", {}).get("user_id", "default_user"),
+                    user_id=user_id,
                 )
                 self.db_available = True
             except Exception as e:
@@ -256,7 +281,7 @@ class KuroEngine:
                 self.storage = _NullStorage()
                 self.user_memory = UserMemory(
                     self.storage,
-                    user_id=self.config.get("chat", {}).get("user_id", "default_user"),
+                    user_id=user_id,
                 )
                 self.db_available = False
 
@@ -271,7 +296,7 @@ class KuroEngine:
         self.base_system_prompt = self.config.get("character", {}).get(
             "system_prompt", ""
         )
-        self.user_id = self.config.get("chat", {}).get("user_id", "default_user")
+        self.user_id = user_id
 
         self._tts_lock = threading.Lock()
 

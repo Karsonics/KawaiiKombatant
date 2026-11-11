@@ -3,6 +3,25 @@
 from pathlib import Path
 
 
+def build_health_payload(engine) -> dict:
+    """Build the health response using only public status fields."""
+    return {
+        "status": "ok",
+        "sessions": engine.get_session_count(),
+        "tts_enabled": engine.tts_enabled,
+        "long_term_memory": engine.markdown_memory_status,
+    }
+
+
+def create_health_handler(engine_provider):
+    """Create the async health endpoint around a supplied engine provider."""
+
+    async def health():
+        return build_health_payload(engine_provider())
+
+    return health
+
+
 def register_api_routes(
     app,
     web_dir: Path,
