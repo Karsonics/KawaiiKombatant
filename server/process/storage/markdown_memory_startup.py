@@ -35,6 +35,8 @@ def initialize_markdown_memory(
 ) -> MarkdownMemoryStartup:
     """Initialize the explicitly configured vault, or report a safe degraded state."""
     memory_config = config.get("memory")
+    if isinstance(memory_config, dict) and memory_config.get("enabled") is False:
+        return MarkdownMemoryStartup(None, False, "disabled")
     vault_path = (
         memory_config.get("vault_path")
         if isinstance(memory_config, dict)

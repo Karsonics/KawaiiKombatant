@@ -260,3 +260,37 @@ def test_duplicate_ids_are_detected_across_managed_directories(
     assert f"Skipped duplicate memory ID {original.id} in files:" in store.diagnostics[0]
     assert f"facts/{original.id}.md" in store.diagnostics[0]
     assert f"{directory}/{original.id}.md" in store.diagnostics[0]
+
+
+def test_search_returns_relevant_active_long_term_records_only(store):
+    preference = store.create_memory(
+        "u", "preference", "The user prefers concise answers", tags=("style",)
+    )
+    unrelated = store.create_memory("u", "fact", "The user's bicycle is red")
+    store.create_memory("u", "temporary", "Concise answers for today")
+    archived = store.create_memory(
+        "u", "experience", "A concise answer worked well", status="archived"
+    )
+
+    found = store.search_memories("u", "please answer with concise answers")
+
+    assert [record.id for record in found] == [preference.id]
+    assert unrelated.id not in {record.id for record in found}
+    assert archived.id not in {record.id for record in found}
+
+
+def test_search_respects_result_and_character_limits(store):
+    first = store.create_memory("u", "fact", "Python is the user's main language")
+    store.create_memory("u", "experience", "User built a Python tool")
+
+    found = store.search_memories(
+        "u", "Python", limit=1, max_chars=len(first.content) + 80
+    )
+
+    assert len(found) == 1
+    assert len(found[0].content) + 80 <= len(first.content) + 80
+
+
+def test_search_rejects_invalid_limit(store):
+    with pytest.raises(ValueError):
+        store.search_memories("u", "query", limit=0)

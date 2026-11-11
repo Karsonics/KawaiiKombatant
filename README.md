@@ -63,10 +63,17 @@ Markdown long-term memory vault. It has no default; leave it empty to keep
 Markdown memory unavailable. At startup Kuro initializes only the configured
 vault and the effective single user identity. If the path is missing, invalid,
 or unavailable, chat continues and the server health response reports long-term
-memory as unavailable. Conversation transcripts and session data remain in
-MySQL; this setting does not yet connect Markdown memory to chat retrieval or
-capture. Kuro uses the effective single identity from `chat.user_id`, defaulting
-to `default_user` when omitted; explicitly supplied IDs are validated.
+memory as unavailable. During each turn Kuro retrieves a small, bounded set of
+relevant active facts, preferences, and experiences and adds them to the model
+context. Markdown memories are read-only in chat; automatic capture is not
+implemented. Conversation transcripts and session summaries remain in MySQL.
+Kuro uses the effective single identity from `chat.user_id`, defaulting to
+`default_user` when omitted; explicitly supplied IDs are validated.
+
+Retrieval can be limited with `memory.retrieval_limit` (default 5, maximum 20)
+and `memory.max_context_chars` (default 4000, maximum 12000). Set
+`memory.enabled: false` to disable the vault. Retrieved note text is treated as
+reference data and does not become an instruction source.
 
 ### Changing the Character
 

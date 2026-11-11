@@ -292,6 +292,57 @@ class MarkdownMemoryStore:
             )
         return records
 
+    def search_memories(
+        self,
+        user_id: str,
+        query: str,
+        *,
+        limit: int = 5,
+        max_chars: int = 4000,
+    ) -> list[MemoryRecord]:
+        """Return active fact, preference, and experience records relevant to query.
+
+        Matching is deliberately local and deterministic: query terms are scored
+        against note content, tags, and type. Temporary notes are excluded from
+        persistent cross-session recall.
+        """
+        if not isinstance(query, str) or not query.strip():
+            return []
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            raise ValueError("limit must be a positive integer")
+        if (
+            not isinstance(max_chars, int)
+            or isinstance(max_chars, bool)
+            or max_chars < 1
+        ):
+            raise ValueError("max_chars must be a positive integer")
+
+        terms = set(re.findall(r"[a-z0-9]+", query.casefold()))
+        if not terms:
+            return []
+        records = self.list_memories(user_id, active=True)
+        scored: list[tuple[int, str, MemoryRecord]] = []
+        for record in records:
+            if record.type not in {"fact", "preference", "experience"}:
+                continue
+            text = f"{record.type} {' '.join(record.tags)} {record.content}".casefold()
+            words = re.findall(r"[a-z0-9]+", text)
+            overlap = terms.intersection(words)
+            if overlap:
+                score = sum(words.count(term) for term in overlap)
+                scored.append((score, record.updated, record))
+        scored.sort(key=lambda item: (-item[0], item[1], item[2].id))
+
+        selected: list[MemoryRecord] = []
+        used_chars = 0
+        for _, _, record in scored:
+            rendered_size = len(record.content) + 80
+            if len(selected) >= limit or used_chars + rendered_size > max_chars:
+                continue
+            selected.append(record)
+            used_chars += rendered_size
+        return selected
+
     def update_memory(
         self,
         record: MemoryRecord,

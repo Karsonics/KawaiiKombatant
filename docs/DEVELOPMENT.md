@@ -40,11 +40,17 @@ inaccessible, chat starts in degraded mode and reports that long-term Markdown
 memory is unavailable without including the configured path in the status. The
 server health response includes `long_term_memory` status.
 
-The store does not yet participate in retrieval, capture, session summaries,
-or legacy MySQL import. Existing live memory behavior remains MySQL-backed.
-Obsidian is optional, and the storage component does not support cross-process
-write coordination. Never use an engineering documentation directory or a
-personal vault containing unrelated notes as the memory path.
+During each turn the engine retrieves a bounded set of relevant active facts,
+preferences, and experiences from the configured user's Markdown files. Matching
+is deterministic and local. Retrieval failures do not block chat. Retrieved
+notes are reference context only; chat does not automatically capture or edit
+Markdown memories. Session summaries and transcripts remain in MySQL, and no
+legacy MySQL import is performed. Set `memory.enabled: false` to disable the
+vault. `memory.retrieval_limit` defaults to 5 (maximum 20) and
+`memory.max_context_chars` defaults to 4000 (maximum 12000). Obsidian is
+optional, and the storage component does not support cross-process write
+coordination. Never use an engineering documentation directory or a personal
+vault containing unrelated notes as the memory path.
 
 Do not put secrets into tracked files. Inspect `.gitignore` before adding local configuration, and do not share configuration contents or logs without checking them for credentials and user data.
 

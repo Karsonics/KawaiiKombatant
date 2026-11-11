@@ -2,6 +2,7 @@
 
 from server.kuro_engine import KuroEngine, _resolve_llm_config
 from server.process.storage.mysql_storage import MySQLConversationStorage
+from server.process.storage.markdown_memory import MarkdownMemoryStore
 
 
 class FakeUserMemory:
@@ -191,6 +192,49 @@ def test_new_session_without_summary_does_not_inherit_another_session():
 
     assert new_session_id != "old-session"
     assert "private old context" not in str(contexts[0])
+
+
+def test_markdown_memories_are_recalled_across_distinct_sessions(tmp_path):
+    vault = tmp_path / "vault"
+    store = MarkdownMemoryStore(vault)
+    store.initialize_vault()
+    store.initialize_user("default_user")
+    store.create_memory(
+        "default_user", "preference", "The user prefers concise Python examples"
+    )
+    store.create_memory("default_user", "fact", "The user's bicycle is red")
+
+    engine = make_engine()
+    engine.user_id = "default_user"
+    engine.markdown_memory = store
+    engine.config["memory"] = {"enabled": True}
+    contexts = []
+    engine._stream_response = lambda messages: (
+        contexts.append(messages) or iter(["Kuro reply."])
+    )
+
+    engine.process_message("Show me a Python example", "session-one")
+    engine.process_message("Can you give another Python example?", "session-two")
+
+    assert "concise Python examples" in str(contexts[0])
+    assert "concise Python examples" in str(contexts[1])
+    assert "bicycle is red" not in str(contexts[0])
+    assert "bicycle is red" not in str(contexts[1])
+    assert "untrusted reference data" in str(contexts[1])
+
+
+def test_markdown_retrieval_failure_does_not_block_chat():
+    class BrokenMemory:
+        def search_memories(self, *_args, **_kwargs):
+            raise OSError("synthetic vault read failure")
+
+    engine = make_engine()
+    engine.user_id = "default_user"
+    engine.markdown_memory = BrokenMemory()
+
+    result = engine.process_message("hello", "session")
+
+    assert result["text"] == "Kuro reply."
 
 
 def test_summary_failure_does_not_prevent_chat_or_change_user_preferences():

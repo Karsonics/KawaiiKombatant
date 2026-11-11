@@ -50,6 +50,23 @@ def test_missing_blank_and_relative_paths_degrade_without_constructing_store(tmp
     assert list(tmp_path.iterdir()) == []
 
 
+def test_disabled_memory_does_not_initialize_the_configured_vault(tmp_path):
+    class ForbiddenFactory:
+        def __init__(self, _path):
+            pytest.fail("disabled memory must not construct a store")
+
+    vault = tmp_path / "vault"
+    result = initialize_markdown_memory(
+        {"memory": {"enabled": False, "vault_path": str(vault)}},
+        store_factory=ForbiddenFactory,
+    )
+
+    assert result.store is None
+    assert not result.available
+    assert result.status == "disabled"
+    assert not vault.exists()
+
+
 def test_valid_vault_initializes_only_the_explicit_path(tmp_path):
     vault = tmp_path / "chosen-vault"
     result = initialize_markdown_memory(
