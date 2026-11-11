@@ -15,6 +15,7 @@ from server.process.storage.markdown_memory_startup import (
     initialize_markdown_memory,
     validate_user_id,
 )
+from server.process.storage.markdown_memory_capture import MarkdownMemoryCapture
 from server.process.tts_func import (
     init_tts,
     speak,
@@ -429,6 +430,33 @@ class KuroEngine:
             )
         return "\n".join(lines)
 
+    def _capture_markdown_memory(self, user_input: str, session_id: str) -> None:
+        """Capture safe long-term memories without making chat depend on it."""
+        store = getattr(self, "markdown_memory", None)
+        memory_config = self.config.get("memory")
+        if store is None or (
+            isinstance(memory_config, dict)
+            and (
+                memory_config.get("enabled") is False
+                or memory_config.get("capture_enabled") is False
+            )
+        ):
+            return
+        if self.llm_provider is None:
+            return
+        try:
+            count = MarkdownMemoryCapture(
+                self.llm_provider,
+                self.extraction_model_name,
+                store,
+                self.user_id,
+            ).capture(user_input, source_session=session_id)
+            if count:
+                logger.info("Captured %d long-term Markdown memory candidate(s)", count)
+        except Exception:
+            # Memory extraction or storage is optional; don't interrupt a turn.
+            logger.warning("Long-term Markdown memory capture failed")
+
     def process_message(self, user_input: str, session_id: str, sentence_callback=None) -> dict:
         if not self.dry_run:
             self.storage.add_message(
@@ -490,6 +518,7 @@ class KuroEngine:
 
         self.user_memory.set_mood(mood, emotion)
         self._extract_user_info(user_input, kuro_reply)
+        self._capture_markdown_memory(user_input, session_id)
         self.user_memory.flush()
 
         if not self.dry_run:
@@ -533,38 +562,69 @@ class KuroEngine:
         return self.user_memory.get_memory_summary()
 
     def get_formatted_memory(self) -> str:
-        lines = []
-        mem = self.user_memory.memory
-
-        lines.append(f"User ID: {self.user_id}\n")
+        lines = [f"User ID: {self.user_id}", "", "Legacy User Memory"]
+        mem = getattr(self.user_memory, "memory", {})
+        if not isinstance(mem, dict):
+            mem = {}
+        legacy_records = False
         if mem.get("personal_info"):
-            lines.append("Personal Information:")
+            legacy_records = True
+            lines.append("  Personal Information:")
             for k, v in mem["personal_info"].items():
-                lines.append(f"  - {k}: {v}")
+                lines.append(f"    - {k}: {v}")
 
         if mem.get("preferences"):
-            lines.append("\nPreferences:")
+            legacy_records = True
+            lines.append("  Preferences:")
             for k, v in mem["preferences"].items():
-                lines.append(f"  - {k}: {v}")
+                lines.append(f"    - {k}: {v}")
 
         if mem.get("detailed_preferences"):
+            legacy_records = True
             lines.append("\nDetailed Preferences:")
             for category, prefs in mem["detailed_preferences"].items():
                 for pref in prefs:
                     ctx = f" - {pref['context']}" if pref.get("context") else ""
-                    lines.append(f"  {category}: {pref['value']}{ctx}")
+                    lines.append(f"  - {category}: {pref['value']}{ctx}")
 
         if mem.get("important_facts"):
-            lines.append("\nImportant Facts:")
+            legacy_records = True
+            lines.append("  Important Facts:")
             for entry in mem["important_facts"][-15:]:
                 fact = entry["fact"] if isinstance(entry, dict) else entry
-                lines.append(f"  - {fact}")
+                lines.append(f"    - {fact}")
 
         if mem.get("topics_discussed"):
+            legacy_records = True
             topics = mem["topics_discussed"][-10:]
-            lines.append(f"\nTopics: {', '.join(topics)}")
+            lines.append(f"  Topics Discussed: {', '.join(topics)}")
 
-        return "\n".join(lines) if len(lines) > 1 else "No stored memories."
+        if not legacy_records:
+            lines.append("  No legacy user memory records.")
+
+        lines.extend(["", "Markdown Long-Term Memory (Obsidian)"])
+        store = getattr(self, "markdown_memory", None)
+        if store is None:
+            lines.append("  Unavailable: Markdown memory store is not initialized.")
+            return "\n".join(lines)
+
+        try:
+            records = store.list_memories(self.user_id, active=True)
+        except Exception:
+            logger.warning("Markdown memory retrieval failed for memory command")
+            lines.append("  Unable to retrieve Markdown long-term memories.")
+            return "\n".join(lines)
+
+        if not records:
+            lines.append("  No active Markdown long-term memories.")
+        else:
+            for record in records:
+                memory_type = record.type.replace("_", " ").capitalize()
+                record_tags = record.tags or ()
+                tags = f" [tags: {', '.join(record_tags)}]" if record_tags else ""
+                lines.append(f"  - {memory_type}: {record.content}{tags}")
+
+        return "\n".join(lines)
 
     def display_memory(self) -> None:
         print(self.get_formatted_memory())

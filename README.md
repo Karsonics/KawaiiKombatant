@@ -65,8 +65,15 @@ vault and the effective single user identity. If the path is missing, invalid,
 or unavailable, chat continues and the server health response reports long-term
 memory as unavailable. During each turn Kuro retrieves a small, bounded set of
 relevant active facts, preferences, and experiences and adds them to the model
-context. Markdown memories are read-only in chat; automatic capture is not
-implemented. Conversation transcripts and session summaries remain in MySQL.
+context. When the vault is available, Kuro also automatically asks the
+configured `llm.extraction_model` to identify durable, explicitly stated,
+non-sensitive facts, preferences, and experiences in each user message. Only
+exact quotations that pass strict format, confidence, and privacy checks are
+saved. Duplicates and possible conflicts are skipped without changing existing
+notes. Set `memory.capture_enabled: false` to disable capture while keeping
+retrieval. Extraction or storage failures do not block chat. Messages are sent
+to the configured LLM provider for extraction, which may be remote. Conversation
+transcripts and session summaries remain in MySQL.
 Kuro uses the effective single identity from `chat.user_id`, defaulting to
 `default_user` when omitted; explicitly supplied IDs are validated.
 

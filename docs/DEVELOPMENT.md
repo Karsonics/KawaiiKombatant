@@ -42,11 +42,17 @@ server health response includes `long_term_memory` status.
 
 During each turn the engine retrieves a bounded set of relevant active facts,
 preferences, and experiences from the configured user's Markdown files. Matching
-is deterministic and local. Retrieval failures do not block chat. Retrieved
-notes are reference context only; chat does not automatically capture or edit
-Markdown memories. Session summaries and transcripts remain in MySQL, and no
-legacy MySQL import is performed. Set `memory.enabled: false` to disable the
-vault. `memory.retrieval_limit` defaults to 5 (maximum 20) and
+is deterministic and local. Retrieval failures do not block chat. When a vault
+is available, Kuro also asks `llm.extraction_model` to propose durable memories
+from the current user message. The capture layer requires exact quoted content,
+strict JSON fields, confidence of at least 0.85, and local sensitive-data checks;
+it skips duplicates and possible conflicts and never updates an existing note.
+Set `memory.capture_enabled: false` to disable writes while keeping retrieval.
+Extraction/storage failures do not block chat. Because candidate generation
+uses the configured LLM provider, user messages may be sent to a remote service.
+Session summaries and transcripts remain in MySQL, and no legacy MySQL import is
+performed. Set `memory.enabled: false` to disable the vault.
+`memory.retrieval_limit` defaults to 5 (maximum 20) and
 `memory.max_context_chars` defaults to 4000 (maximum 12000). Obsidian is
 optional, and the storage component does not support cross-process write
 coordination. Never use an engineering documentation directory or a personal

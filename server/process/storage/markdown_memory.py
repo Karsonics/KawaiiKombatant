@@ -1,7 +1,4 @@
-"""Standalone, human-editable Markdown storage for personal memories.
-
-This backend is intentionally not connected to KuroEngine or MySQL yet.
-"""
+"""Human-editable Markdown storage for personal memories."""
 
 from __future__ import annotations
 
