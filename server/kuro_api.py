@@ -2,7 +2,6 @@ import asyncio
 import base64
 import json
 import os
-import sys
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -10,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from server.kuro_engine import KuroEngine
+from server.api_listener import parse_api_server_args
+from server.api_routes import register_api_routes
 from server.process.asr_func.asr_push_to_talk import transcribe_bytes as asr_transcribe
 from utils.logging import logger
 
@@ -19,21 +20,14 @@ app = FastAPI(title="Kuro V-Tuber Engine")
 
 
 _web_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "web"
-if _web_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(_web_dir)), name="web_static")
-    app.mount(
-        "/models", StaticFiles(directory=str(_web_dir / "models")), name="web_models"
-    )
 
-    @app.get("/")
-    async def web_root():
-        return FileResponse(str(_web_dir / "index.html"))
 
-    @app.get("/settings")
-    async def web_settings():
-        return FileResponse(str(_web_dir / "settings.html"))
+async def web_root():
+    return FileResponse(str(_web_dir / "index.html"))
 
-    logger.info("Web UI static files mounted from %s", _web_dir)
+
+async def web_settings():
+    return FileResponse(str(_web_dir / "settings.html"))
 
 
 @app.on_event("shutdown")
@@ -41,7 +35,6 @@ async def shutdown():
     engine.close()
 
 
-@app.get("/health")
 async def health():
     return {
         "status": "ok",
@@ -73,7 +66,6 @@ async def _process_with_streaming(
     return await fut
 
 
-@app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
     await ws.accept()
     session_id: str | None = None
@@ -219,6 +211,18 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         logger.error("WebSocket error: %s", e)
 
 
+register_api_routes(
+    app,
+    _web_dir,
+    static_files_factory=StaticFiles,
+    logger=logger,
+    root_handler=web_root,
+    settings_handler=web_settings,
+    health_handler=health,
+    websocket_handler=websocket_endpoint,
+)
+
+
 async def _broadcast_mood(mood: str, emotion: float) -> None:
     if not _mood_subscribers:
         return
@@ -260,12 +264,9 @@ def _handle_command(cmd: str, session_id: str | None) -> str | dict:
 
 
 def main() -> None:
-    port = 8765
-    for i, arg in enumerate(sys.argv):
-        if arg == "--port" and i + 1 < len(sys.argv):
-            port = int(sys.argv[i + 1])
-    logger.info("Starting KuroAPI on 0.0.0.0:%s", port)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    args = parse_api_server_args()
+    logger.info("Starting KuroAPI on %s:%s", args.host, args.port)
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

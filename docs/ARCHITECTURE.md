@@ -1,161 +1,55 @@
-# Kuro Architecture
+# Architecture
 
-Status: proposed target architecture
-Scope: incremental refactor of the existing Python application; not a rewrite.
+Status: current implementation plus explicitly labeled design direction. Verify behavior in code before relying on this note.
 
-## Goals
-- Keep Kuro local-first and usable on a 16 GB GPU while games are running.
-- Keep LLM, ASR, TTS, memory, avatar and tools independently replaceable.
-- Keep normal conversation fast; tool execution must be explicit and permission-controlled.
-- Make each subsystem testable without requiring every local service.
-- Preserve the current FastAPI/WebSocket UI, Ollama-compatible API, MySQL persistence and VTube Studio integration during migration.
+## Current implementation
 
-## Current implementation (observed)
-- KuroEngine currently coordinates provider calls, history, memory extraction, mood calculation, summarization and TTS.
-- An initial LLM boundary already exists in `server/llm/base.py` and `server/llm/openai_compatible.py`; KuroEngine uses this adapter. This is a first extraction, not yet a fully tested provider lifecycle or capability abstraction.
-- LLM streaming is synchronous and is run through an executor by the WebSocket API.
-- TTS synthesis/playback is invoked inline while the engine consumes LLM sentences. The TTS manager and engine use thread locks.
-- The FastAPI module constructs a global KuroEngine during import.
-- Memory is persisted through MySQL; user facts/preferences are currently stored as structured JSON and extracted with LLM/regex helpers.
-- The API handles text and push-to-talk audio input and broadcasts mood updates.
+Kuro is a single Python application with CLI, API, voice, storage, and avatar modules:
 
-These are migration targets, not reasons to discard the existing implementation.
+- `bot_main.py` selects direct CLI, WebSocket CLI, voice client, or avatar client modes.
+- `server/kuro_api.py` serves the web UI and FastAPI/WebSocket endpoints. It constructs a module-level `KuroEngine` during import. Synchronous engine work is run through an executor in the WebSocket path.
+- `server/kuro_engine.py` coordinates LLM generation, conversation history, memory extraction, mood calculation, summarization, and TTS. The engine streams text from the provider but invokes TTS inline as sentences are processed.
+- `server/llm/base.py` defines a small provider protocol; `openai_compatible.py` adapts OpenAI-compatible chat completions for configured providers such as Ollama, OpenAI, OpenRouter, and custom endpoints. Provider streaming yields text fragments.
+- `server/process/storage/mysql_storage.py` stores conversations, session state, and user preference JSON in MySQL. The engine falls back to in-memory/no-persistence behavior when database initialization fails.
+- `server/process/storage/markdown_memory.py` provides an independent Markdown memory storage component with per-user files, validated YAML frontmatter, and CRUD/filter operations. It is not connected to `KuroEngine`; the current runtime still uses MySQL-backed `UserMemory`.
+- `server/process/tts_func/` contains a manager and GPT-SoVITS/F5-TTS implementations. F5-TTS may be unavailable depending on its separate service/dependencies. `voice/` and `server/process/asr_func/` implement microphone, VAD, Whisper transcription, and voice-client paths.
+- `avatar/` connects to VTube Studio and maps mood updates to configured hotkeys/idle actions.
 
-## Target: modular monolith
-Keep one deployable Python application initially. Use explicit interfaces and dependency injection before considering separate processes.
+The code has some interfaces and adapters, but orchestration and several subsystem concerns remain in `KuroEngine`. Importing the API module has initialization side effects. The existing arrangement should not be mistaken for a fully decoupled architecture.
 
-~~~mermaid
-flowchart TD
-    Client[Web UI / Microphone] --> API[FastAPI + WebSocket]
-    API --> Conversation[Conversation Orchestrator]
-    API --> ASR[ASR Provider]
-    ASR --> Conversation
-    Conversation --> Context[Prompt + Context Builder]
-    Context --> Memory[Memory Service]
-    Context --> Agent[Agent Runtime]
-    Agent --> LLM[LLM Provider]
-    Agent --> Tools[Permissioned Tool Registry]
-    Tools --> Desktop[Desktop / Game Adapters]
-    Agent --> Events[Conversation Events]
-    Events --> UI[WebSocket Event Publisher]
-    Events --> Speech[Speech Pipeline]
-    Speech --> TTS[TTS Provider]
-    Events --> Emotion[Emotion / Avatar Controller]
-    Emotion --> VTS[VTube Studio Adapter]
-    Memory --> Storage[Storage Interface]
-    Storage --> MySQL[(MySQL)]
-~~~
+## Runtime and persistence notes
 
-## Proposed package boundaries
-~~~text
-server/
-  api/
-    app.py                 # FastAPI application factory and lifespan
-    routes.py              # HTTP and WebSocket transport
-    websocket_events.py    # typed client/server event serialization
-  core/
-    config.py              # validated application configuration
-    events.py              # internal event types
-    orchestrator.py        # conversation use-case coordination
-    session_manager.py     # session lifecycle and per-session state
-  llm/
-    base.py                # provider protocol
-    openai_compatible.py   # Ollama and compatible endpoints
-    options.py             # model settings and capability flags
-  agent/
-    runtime.py             # bounded tool-call loop
-    registry.py            # tool definitions and dispatch
-    permissions.py         # allow/deny/confirm policies
-  memory/
-    service.py             # memory use cases and context assembly
-    extraction.py          # structured fact extraction
-  storage/
-    base.py                # persistence protocol
-    mysql.py               # existing MySQL implementation, migrated gradually
-  voice/
-    asr/
-    tts/
-      base.py
-      manager.py
-      queue.py              # bounded speech queue and cancellation
-  avatar/
-    controller.py          # mood/expression mapping
-    vtube_studio.py        # VTube Studio adapter
-  tools/
-    desktop/
-    games/
-~~~
+- LLM configuration is read from `configs/bot_config.yaml`; a legacy `ollama` section is supported by the engine. The provider adapter uses the OpenAI SDK protocol.
+- MySQL credentials/settings are expected in the ignored local file `configs/database_config.yaml`; no tracked template for it is present. Without usable database access, the engine logs a warning and continues without persistence.
+- ASR settings are in `configs/asr_config.yaml`; VTube Studio settings are in `configs/vtube_config.yaml`. TTS provider routing is configured in `bot_config.yaml`; GPT-SoVITS details and voice references are in `sovits_config.yaml`.
+- WebSocket and CLI behavior, message formats, and configuration are observable contracts. Inspect callers and tests before changing them.
 
-The package layout is a target, not a demand to move every file immediately. Existing modules can be wrapped by adapters and moved only when tests protect their behavior.
+## Standalone Markdown memory storage — implemented, not integrated
 
-## Runtime rules
-1. The API layer validates input and translates it into application commands. It does not own business logic.
-2. The orchestrator owns one conversation turn and coordinates context, agent execution, persistence and output events.
-3. The LLM provider returns normalized text/tool-call events. Provider-specific payloads stay inside the provider adapter.
-4. The agent runtime may execute only registered tools. Tools have schemas, timeouts, permission levels and audit logs.
-5. TTS consumes complete sentence/segment events from a bounded queue. Speech synthesis must not block LLM token consumption. Playback order is preserved; cancellation clears pending segments.
-6. ASR and TTS are replaceable providers. CPU/GPU placement and model residency are configuration, not hard-coded assumptions.
-7. Each session has isolated conversation state. Shared user memory and provider clients must be concurrency-safe.
-8. The avatar receives emotion/control events; it does not depend directly on the LLM implementation.
+- The standalone `MarkdownMemoryStore` requires an explicit vault path and can initialize `README.md` plus `users/<user_id>/` directories containing `profile.md`, `facts/`, `preferences/`, `experiences/`, and `temporary/`.
+- Each memory is an individual Markdown file with validated YAML frontmatter. The storage API supports create, get, list/filter, update, and delete; list skips malformed files and all parseable records sharing a duplicate ID anywhere in the user's memory directories, with filename-only diagnostics.
+- Markdown files are the source of truth for records managed by this standalone component. MySQL remains the current live runtime's store for transcripts, session state, and the existing JSON-backed `UserMemory` until integration and migration are separately approved.
+- Writes use a same-directory temporary file, flush and `fsync`, then `os.replace`. Updates and deletes require the version token returned by a read, so stale edits are rejected. A process-local lock serializes writes in one process; cross-process locking is not implemented or guaranteed.
+- This component does not extract memories, expire them, migrate MySQL data, or affect conversation summaries. The live application continues to use `UserMemory` and MySQL until a separately approved integration and migration.
+- Current-state caveat: `KuroEngine._maybe_summarize` still writes a session-triggered summary into the MySQL-backed global `UserMemory.conversation_summary`. The intended separation of summaries from long-term personal memory is not yet implemented in the live runtime.
 
-## Resource profiles
-- Companion: small local model, short context, TTS enabled, no continuous vision.
-- Gaming: smaller model or unloaded LLM when needed, CPU-first voice services where practical, bounded queues, no continuous screen capture unless explicitly enabled.
-- Agent: tool execution enabled only for approved tools; destructive or externally visible actions require confirmation.
+## Proposed design direction — not implemented contracts
 
-The runtime should report actual memory use and service status. It must not promise that a model or TTS backend fits in VRAM based only on parameter count.
+These are design ideas for future, separately scoped work; they are not current capabilities or requirements to refactor immediately:
 
-## Migration plan
-### Phase 0 — Baseline and safety
-- Keep work on kuro/test-readiness; do not change main.
-- Make tests independent of Ollama, MySQL, audio devices and GPU.
-- Add CI and record baseline behavior/latency.
-- Validate configuration at startup and expose a safe health/status endpoint.
+- Integrate the Markdown memory store with runtime only through a separately approved migration and integration plan; keep session summaries and operational state in MySQL.
+- Gradually separate API transport, conversation orchestration/context, storage, memory, speech events, and avatar control behind explicit interfaces.
+- Consider an application factory/lifespan so API initialization does not occur at import time.
+- Consider decoupling synthesis/playback from LLM token processing with a bounded asynchronous TTS queue, preserving order and defining cancellation/backpressure behavior. There is no such queue currently.
+- If agent tools are introduced, use a bounded dispatcher with narrow schemas, permissions, timeouts, and audit behavior; no agent tool runtime is currently present.
+- Evaluate session isolation and shared state concurrency as behavior evolves. Do not assume the current global API engine or user memory is session-isolated.
+- Measure actual CPU, RAM, GPU/VRAM, and latency before adding model/resource management behavior.
 
-### Phase 1 — Extract LLM provider
-- Introduce an LLM provider protocol and one OpenAI-compatible implementation.
-- Move request construction, model options, streaming and response normalization out of KuroEngine.
-- Add mocked tests for streaming, errors, options and provider-specific extras.
-- Add an opt-in live Ollama smoke test.
+Any proposal that changes public behavior, persistence/schema, deployment, or subsystem boundaries should state its evidence and trade-offs before implementation.
 
-### Phase 2 — Separate orchestration and memory
-- Move prompt/context construction and session turn handling into an orchestrator.
-- Define a storage protocol and wrap the existing MySQL storage.
-- Make user memory per-user/session-safe and test persistence with fakes.
-- Keep current schema and data; migrations must be explicit.
+## Unresolved questions
 
-### Phase 3 — Decouple speech and avatar
-- Introduce typed response/sentence/mood events.
-- Add a bounded asynchronous TTS queue with ordered playback, cancellation and backpressure.
-- Keep existing GPT-SoVITS/F5-TTS behind adapters.
-- Add CPU-capable TTS provider only after a standalone benchmark.
-- Move VTube Studio commands behind an avatar adapter.
-
-### Phase 4 — Agent and tools
-- Add tool schemas, registry, dispatcher, timeout and permission policy.
-- Add a bounded tool-call loop with maximum steps and clear error handling.
-- Start with harmless read-only tools; require confirmation for file writes, shell commands, purchases, messages and game actions.
-- Keep normal companion chat separate from agent mode.
-
-### Phase 5 — Gaming and resource manager
-- Add explicit companion/gaming/agent profiles.
-- Measure GPU VRAM, system RAM, CPU usage, latency and tokens/sec.
-- Add service start/stop and model unload controls where supported.
-- Add game adapters individually; no arbitrary unrestricted computer control.
-
-## Testing strategy
-- Unit tests: fake LLM, fake storage, fake TTS, fake ASR, fake avatar and fake tools.
-- Contract tests: every provider/adapter must satisfy its interface.
-- Integration tests: local Ollama and local TTS, explicitly opted in.
-- Hardware tests: run manually on the target PC and record GPU/CPU/memory metrics.
-- End-to-end tests: text chat first, then voice, then tools, then game integration.
-
-## Non-goals for the first refactor
-- No microservices or message broker.
-- No replacement of MySQL without measured need.
-- No full framework rewrite.
-- No unrestricted autonomous shell or desktop control.
-- No vector database until current memory retrieval has been measured and shown insufficient.
-
-## Definition of the first usable milestone
-A user can start the API without import-time side effects, send a text message, receive a streamed response from a configurable Ollama model, persist the turn, and run the same path in automated tests with fake dependencies. TTS can be disabled without changing the conversation path.
+- What is the supported database bootstrap/configuration procedure? The credential-bearing config is ignored and no template is tracked.
+- Which TTS and ASR service versions and platform combinations are supported? Requirements list general packages, while some backend runtimes/services are external or optional.
+- What API/WebSocket compatibility guarantees and session-isolation guarantees are intended beyond current observed behavior?
+- Which items in the separate Obsidian knowledge base represent accepted decisions versus exploratory plans? Obsidian was not accessible during this repository documentation update.
