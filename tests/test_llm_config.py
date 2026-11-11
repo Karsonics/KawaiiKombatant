@@ -19,6 +19,7 @@ def test_resolve_ollama_config_uses_expected_defaults():
         "api_key": "ollama",
         "model": "qwen3.5:9b",
         "extraction_model": "qwen3.5:9b",
+        "summarization_model": "qwen3.5:9b",
         "temperature": None,
         "top_p": None,
         "max_tokens": None,
@@ -57,6 +58,7 @@ def test_resolve_separate_extraction_model():
 
     assert resolved["model"] == "main-model"
     assert resolved["extraction_model"] == "small-model"
+    assert resolved["summarization_model"] == "small-model"
     assert resolved["base_url"] == "http://localhost:9000/v1"
     assert resolved["temperature"] is None
     assert resolved["extra_body"] == {}

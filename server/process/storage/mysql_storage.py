@@ -62,7 +62,7 @@ class MySQLConversationStorage:
                 metadata TEXT,
                 INDEX idx_session (session_id(50)),
                 INDEX idx_timestamp (timestamp)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """
             cursor.execute(conversations_table)
 
@@ -75,7 +75,7 @@ class MySQLConversationStorage:
                 context_summary TEXT,
                 last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_session (session_id(50))
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """
             cursor.execute(character_states_table)
 
@@ -87,9 +87,19 @@ class MySQLConversationStorage:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_user (user_id(50))
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """
             cursor.execute(user_preferences_table)
+
+            session_summaries = f"""
+            CREATE TABLE IF NOT EXISTS {self._session_summaries_table()} (
+                session_id VARCHAR(50) NOT NULL PRIMARY KEY,
+                summary TEXT NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """
+            cursor.execute(session_summaries)
 
             connection.commit()
             logger.info("Database tables initialized successfully")
@@ -269,12 +279,72 @@ class MySQLConversationStorage:
                 f"DELETE FROM {self.config['tables']['character_states']} WHERE session_id = %s",
                 (session_id,),
             )
+            cursor.execute(
+                f"DELETE FROM {self._session_summaries_table()} WHERE session_id = %s",
+                (session_id,),
+            )
 
             connection.commit()
             logger.info("Session %s cleared successfully", session_id)
 
         except Error as e:
             logger.error("Error clearing session: %s", e)
+            if connection:
+                connection.rollback()
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def _session_summaries_table(self) -> str:
+        """Return the configured summary table, with a backward-compatible default."""
+        return self.config.get("tables", {}).get(
+            "session_summaries", "session_summaries"
+        )
+
+    def get_session_summary(self, session_id: str) -> Optional[str]:
+        connection = None
+        cursor = None
+        try:
+            connection = self._get_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                f"SELECT summary FROM {self._session_summaries_table()} "
+                "WHERE session_id = %s",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Error as e:
+            logger.error("Error retrieving session summary: %s", e)
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def set_session_summary(self, session_id: str, summary: str) -> None:
+        connection = None
+        cursor = None
+        try:
+            connection = self._get_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                f"""
+                INSERT INTO {self._session_summaries_table()} (session_id, summary)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE
+                    summary = VALUES(summary),
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (session_id, summary),
+            )
+            connection.commit()
+        except Error as e:
+            logger.error("Error saving session summary: %s", e)
             if connection:
                 connection.rollback()
             raise

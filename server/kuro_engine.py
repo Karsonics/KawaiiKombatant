@@ -95,6 +95,10 @@ def _resolve_llm_config(config: dict) -> dict:
         "api_key": llm_cfg.get("api_key") or defaults["api_key"],
         "model": llm_cfg.get("model", ""),
         "extraction_model": llm_cfg.get("extraction_model") or llm_cfg.get("model", ""),
+        # Keep the historical choice unless a dedicated summarizer is configured.
+        "summarization_model": llm_cfg.get("summarization_model")
+        or llm_cfg.get("extraction_model")
+        or llm_cfg.get("model", ""),
         "temperature": llm_cfg.get("temperature"),
         "top_p": llm_cfg.get("top_p"),
         "max_tokens": llm_cfg.get("max_tokens"),
@@ -194,6 +198,12 @@ class _NullStorage:
     def update_character_state(self, *args, **kwargs):
         pass
 
+    def get_session_summary(self, *args, **kwargs):
+        return None
+
+    def set_session_summary(self, *args, **kwargs):
+        pass
+
     def get_character_state(self, *args, **kwargs):
         return None
 
@@ -247,6 +257,7 @@ class KuroEngine:
 
         self.model_name = llm_cfg["model"]
         self.extraction_model_name = llm_cfg["extraction_model"]
+        self.summarization_model_name = llm_cfg["summarization_model"]
 
         if dry_run:
             logger.info("DRY RUN — skipping LLM and database initialization")
@@ -398,7 +409,14 @@ class KuroEngine:
             recent = self.storage.get_recent_context(session_id, self.context_length)
             messages = [{"role": m["role"], "content": m["content"]} for m in recent]
             memory_context = self.user_memory.build_context_prompt()
-            summary = self.user_memory.get_summary()
+            try:
+                summary = self.storage.get_session_summary(session_id)
+            except Exception:
+                # A summary is an optimization; it must not block a normal turn.
+                summary = None
+                logger.warning(
+                    "Session summary unavailable for session %s", session_id[:8]
+                )
             if memory_context:
                 messages.insert(0, {"role": "system", "content": memory_context})
             if summary:
@@ -518,21 +536,21 @@ class KuroEngine:
     # ------------------------------------------------------------------ #
 
     def _maybe_summarize(self, session_id: str) -> None:
-        threshold = self.config.get("chat", {}).get("summarization_threshold", 20)
-        if threshold <= 0:
-            return
-        count = self.storage.get_message_count(session_id)
-        if count < threshold:
-            return
-        half = count // 2
-        history = self.storage.get_conversation_history(session_id, limit=half)
-        history = [m for m in history if m["role"] != "system"]
-        if not history:
-            return
-        text = "\n".join(f"{m['role']}: {m['content']}" for m in history)
         try:
+            threshold = self.config.get("chat", {}).get("summarization_threshold", 20)
+            if threshold <= 0:
+                return
+            count = self.storage.get_message_count(session_id)
+            if count < threshold:
+                return
+            half = count // 2
+            history = self.storage.get_conversation_history(session_id, limit=half)
+            history = [m for m in history if m["role"] != "system"]
+            if not history:
+                return
+            text = "\n".join(f"{m['role']}: {m['content']}" for m in history)
             summary = self.llm_provider.complete_chat(
-                model=self.extraction_model_name or self.model_name,
+                model=self.summarization_model_name or self.model_name,
                 messages=[
                     {
                         "role": "system",
@@ -543,12 +561,10 @@ class KuroEngine:
                 options={"temperature": 0.3},
             ).strip()
             summary = _strip_think_tags(summary)
-            self.user_memory.set_summary(summary)
-            logger.info(
-                "Conversation summarized (%d messages): %s", count, summary[:80]
-            )
-        except Exception as e:
-            logger.warning("Summarization failed: %s", e)
+            self.storage.set_session_summary(session_id, summary)
+            logger.info("Conversation summarized for session (%d messages)", count)
+        except Exception:
+            logger.warning("Summarization failed for session %s", session_id[:8])
 
     def close(self) -> None:
         self.storage.close()

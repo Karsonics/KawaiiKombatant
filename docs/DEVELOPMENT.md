@@ -26,6 +26,8 @@ Tracked YAML settings are in `configs/`:
 
 The engine expects local MySQL settings at `configs/database_config.yaml`; this path is Git-ignored and the repository has no tracked sample/template. Configure it only from a trusted source. The exact database bootstrap and credential setup need project-owner documentation. If the database is unavailable, the engine currently logs a warning and continues without persistence.
 
+`llm.summarization_model` is an optional model setting for per-session conversation summaries. It is independent of `llm.extraction_model` when explicitly set. For older configuration files, it defaults to `llm.extraction_model`, then `llm.model`; personal-information extraction continues to use `llm.extraction_model`. Session summaries are stored in MySQL by session ID and are loaded only for that session. Summary failures do not prevent an ordinary conversation turn.
+
 ### Standalone Markdown memory store
 
 Set `memory.vault_path` in `configs/bot_config.yaml` to an explicit absolute

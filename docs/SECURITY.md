@@ -6,7 +6,7 @@ Kuro processes user conversation and voice data through local components and con
 
 Treat these as sensitive unless the user says otherwise:
 
-- Conversation history and summaries stored by the MySQL backend.
+- Conversation history and session-keyed summaries stored by the MySQL backend.
 - User memory/preferences, including personal information extracted from messages.
 - Markdown files in any explicitly selected personal memory vault (the standalone storage component is not yet integrated into runtime).
 - Microphone recordings, audio buffers, and transcripts.
@@ -24,6 +24,12 @@ Use only the data necessary for the task. Do not place real conversations, trans
 ## Logs and output
 
 The logger writes to `kawaii.log` with rotation (5 MB, three backups) and to standard output. Runtime exceptions or service responses may include sensitive content even when a logging call appears generic. Avoid logging prompts, model replies, transcripts, user memory, credentials, or full configuration objects. Review command output and logs before sharing them; redact sensitive values.
+
+Session summaries are derived from conversation transcripts and remain sensitive
+conversation data. They are stored in MySQL by session ID, included in prompt
+context only when that same session is processed, and deleted if the storage
+`clear_session` method is used. Do not treat them as user-level profile memory
+or copy them into diagnostics.
 
 ## Safe development and testing
 

@@ -91,6 +91,7 @@ llm:
   api_key: "ollama"                       # or your API key
   model: "qwen2.5:14b"
   extraction_model: "qwen2.5:0.5b"        # smaller model for entity extraction
+  summarization_model: "qwen2.5:0.5b"    # optional; defaults to extraction_model, then model
   extraction_enabled: true                # set false to use regex-only
 ```
 
@@ -98,9 +99,17 @@ The old `ollama:` config key is still supported as a fallback.
 
 ### Conversation Summarization
 
-When a session exceeds `summarization_threshold` messages, Kuro automatically
-summarizes older messages using the LLM and injects the summary as context.
-This effectively doubles the context window without losing history.
+When a session exceeds `summarization_threshold` messages, Kuro attempts to
+summarize part of that session's transcript and stores the result in MySQL,
+keyed to that session. Resuming a session uses its own summary; a new session
+does not inherit it. Summaries are working conversation context, separate from
+the user-level preferences and facts stored by `UserMemory`. Existing legacy
+`conversation_summary` values in user memory are not migrated or deleted.
+
+`llm.summarization_model` configures this task independently from
+`llm.extraction_model`. For backward compatibility, an omitted summarization
+model falls back to `extraction_model`, then the main `model`. A summarization
+failure is logged and does not prevent the conversation turn from completing.
 
 ```yaml
 chat:

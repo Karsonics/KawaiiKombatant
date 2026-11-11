@@ -10,7 +10,7 @@ Kuro is a single Python application with CLI, API, voice, storage, and avatar mo
 - `server/kuro_api.py` serves the web UI and FastAPI/WebSocket endpoints. It constructs a module-level `KuroEngine` during import. Synchronous engine work is run through an executor in the WebSocket path.
 - `server/kuro_engine.py` coordinates LLM generation, conversation history, memory extraction, mood calculation, summarization, and TTS. The engine streams text from the provider but invokes TTS inline as sentences are processed.
 - `server/llm/base.py` defines a small provider protocol; `openai_compatible.py` adapts OpenAI-compatible chat completions for configured providers such as Ollama, OpenAI, OpenRouter, and custom endpoints. Provider streaming yields text fragments.
-- `server/process/storage/mysql_storage.py` stores conversations, session state, and user preference JSON in MySQL. The engine falls back to in-memory/no-persistence behavior when database initialization fails.
+- `server/process/storage/mysql_storage.py` stores conversations, session state, per-session summaries, and user preference JSON in MySQL. The engine falls back to in-memory/no-persistence behavior when database initialization fails.
 - `server/process/storage/markdown_memory.py` provides Markdown memory storage with per-user files, validated YAML frontmatter, and CRUD/filter operations. During normal startup, `KuroEngine` initializes this store using the explicitly configured vault path and validated effective user ID, exposes its availability status, and continues in degraded mode if it cannot initialize. Dry-run startup skips the store. MySQL-backed `UserMemory` remains the active memory path for chat; Markdown memory is not yet used for retrieval, prompt-context construction, automatic capture, runtime memory updates, or user-facing memory commands.
 - `server/process/tts_func/` contains a manager and GPT-SoVITS/F5-TTS implementations. F5-TTS may be unavailable depending on its separate service/dependencies. `voice/` and `server/process/asr_func/` implement microphone, VAD, Whisper transcription, and voice-client paths.
 - `avatar/` connects to VTube Studio and maps mood updates to configured hotkeys/idle actions.
@@ -24,6 +24,14 @@ The code has some interfaces and adapters, but orchestration and several subsyst
 - ASR settings are in `configs/asr_config.yaml`; VTube Studio settings are in `configs/vtube_config.yaml`. TTS provider routing is configured in `bot_config.yaml`; GPT-SoVITS details and voice references are in `sovits_config.yaml`.
 - WebSocket and CLI behavior, message formats, and configuration are observable contracts. Inspect callers and tests before changing them.
 
+## Conversation context and summaries
+
+- Working conversation context is the recent transcript slice loaded for the current session. MySQL remains the transcript source of truth.
+- When `chat.summarization_threshold` is reached, `KuroEngine._maybe_summarize` summarizes a slice of that session's transcript and stores it in MySQL's session-keyed `session_summaries` table. Prompt construction reads the summary for the requested session only. New session IDs have no prior summary; resuming a session loads its own summary.
+- Summarization uses `llm.summarization_model` when set. For backward compatibility, omitted values fall back to `llm.extraction_model`, then `llm.model`. Personal-information extraction continues to use `llm.extraction_model`.
+- Summary generation, retrieval, or persistence failures are logged and treated as missing summary context so ordinary conversation can continue. Existing transcripts are unchanged. Session clearing also removes that session's summary.
+- User-level `UserMemory` remains responsible for preferences, facts, and other user-level state. Its legacy `conversation_summary` field and any stored values are not migrated or deleted, but the conversation engine no longer reads or writes that field for session summarization.
+
 ## Markdown memory storage — startup integrated; chat integration pending
 
 - The standalone `MarkdownMemoryStore` requires an explicit vault path and can initialize `README.md` plus `users/<user_id>/` directories containing `profile.md`, `facts/`, `preferences/`, `experiences/`, and `temporary/`.
@@ -32,7 +40,7 @@ The code has some interfaces and adapters, but orchestration and several subsyst
 - Markdown files are the source of truth for records managed by this standalone component. MySQL remains the current live runtime's store for transcripts, session state, and the existing JSON-backed `UserMemory` until integration and migration are separately approved.
 - Writes use a same-directory temporary file, flush and `fsync`, then `os.replace`. Updates and deletes require the version token returned by a read, so stale edits are rejected. A process-local lock serializes writes in one process; cross-process locking is not implemented or guaranteed.
 - The standalone storage API supports CRUD operations, including updates, but KuroEngine does not yet use it to retrieve memories, build prompt context, capture memories automatically, update Markdown memories during chat, or provide user-facing Markdown memory commands. It does not enforce expiry, migrate MySQL data, or affect conversation summaries. The live application continues to use `UserMemory` and MySQL for chat memory until further integration and migration are separately approved.
-- Current-state caveat: `KuroEngine._maybe_summarize` still writes a session-triggered summary into the MySQL-backed global `UserMemory.conversation_summary`. The intended separation of summaries from long-term personal memory is not yet implemented in the live runtime.
+- Session summaries are now separate from user-level memory. Markdown memory remains a standalone backend for long-term personal memories and is not involved in summary generation or retrieval.
 
 ## Proposed design direction — not implemented contracts
 

@@ -16,6 +16,18 @@ Startup-boundary tests use only temporary paths and fakes:
 python -m pytest tests/test_markdown_memory_startup.py -q
 ```
 
+Session summary tests use in-memory storage/provider fakes and do not connect to
+MySQL or an LLM service:
+
+```bash
+python -m pytest tests/test_session_summaries.py -q
+```
+
+They cover session isolation and resumption, new-session isolation, summary
+failure handling, preservation of user preferences, and separate summarization
+versus extraction model selection. MySQL table/query behavior remains dependent
+on the configured MySQL service and is not exercised by these fakes.
+
 The API health tests register the production async health handler with the
 route-registration helper and invoke the registered callable using a fake app.
 They verify handler behavior, not full FastAPI HTTP or ASGI dispatch.
