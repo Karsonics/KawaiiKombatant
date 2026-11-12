@@ -65,10 +65,12 @@ class UserMemory:
             cursor.close()
             connection.close()
 
-    def save_memory(self) -> None:
+    def save_memory(self, *, raise_on_unavailable: bool = False) -> None:
         try:
             connection = self.storage._get_connection()
         except Exception:
+            if raise_on_unavailable:
+                raise
             return
         cursor = connection.cursor()
 
@@ -250,8 +252,16 @@ class UserMemory:
         return context
 
     def clear_memory(self) -> None:
+        previous_memory = self.memory
+        previous_dirty = self._dirty
         self.memory = self._create_default_memory()
-        self.save_memory()
+        try:
+            self.save_memory(raise_on_unavailable=True)
+        except Exception:
+            self.memory = previous_memory
+            self._dirty = previous_dirty
+            raise
+        self._dirty = False
 
     def display_memory(self) -> None:
         print("\n=== User Memory ===")

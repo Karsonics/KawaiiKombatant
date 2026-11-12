@@ -8,7 +8,7 @@ Treat these as sensitive unless the user says otherwise:
 
 - Conversation history and session-keyed summaries stored by the MySQL backend.
 - User memory/preferences, including personal information extracted from messages.
-- Markdown files in any explicitly selected personal memory vault (the standalone storage component is not yet integrated into runtime).
+- Markdown files in the explicitly configured personal memory vault, used for runtime retrieval/capture and managed through memory commands.
 - Microphone recordings, audio buffers, and transcripts.
 - LLM/TTS configuration, endpoint credentials, local machine details, and generated logs.
 
@@ -39,6 +39,8 @@ or copy them into diagnostics.
 - Inspect scripts before running them. Service checks and benchmarks may contact local/remote systems, use hardware, write files, or reveal secrets. `tests/api_key_test.py` can write `configs/api_config.yaml` and print part of a key; it is not a routine test.
 - Do not run destructive database commands, migrations against real user data, or commands that delete user files without explicit approval.
 - Treat a Markdown memory vault as sensitive personal data. Choose a private location separate from the engineering repository/documentation vault, restrict filesystem permissions, and protect backups. Never place real memory contents in tests, logs, or reports.
+- Memory-clearing and individual Markdown deletion commands require interactive confirmation in the CLI. WebSocket clients must send `confirm: true` explicitly; keep the API on loopback because it has no authentication or authorization.
+- Markdown and combined bulk clearing are sequential and non-transactional. A failure can leave some Markdown records deleted; user-facing errors report completed Markdown deletions and whether a combined clear reached the legacy store, without exposing internal exception details.
 - Automatic Markdown memory capture uses exact quoted message text, a strict candidate schema, a confidence threshold, and local sensitive-data patterns before persistence. The checks are conservative safeguards, not a complete sensitivity classifier; they can miss sensitive content. Disable capture with `memory.capture_enabled: false` when automatic writes are not wanted. Candidate generation uses the configured LLM provider and may send user messages to a remote endpoint.
 - The standalone Markdown store requires an explicit path and validates user IDs before constructing paths. It validates frontmatter, skips malformed files without rewriting them, writes through a same-directory temporary file plus atomic replacement, and rejects updates/deletes when the previously read version is stale. These controls do not provide cross-process locking; concurrent Kuro processes sharing a vault are unsupported.
 - A failed Markdown write raises an error and must not be described as saved. Automatic capture never updates or deletes existing Markdown files; duplicate or possible conflict candidates are skipped. The backend does not migrate MySQL data.

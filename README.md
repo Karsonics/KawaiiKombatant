@@ -204,7 +204,9 @@ While the bot is running:
 - `exit` — Save and exit
 - `history` — Show full conversation history
 - `memory` — Display stored user memories
-- `clear_memory` — Clear all stored user data
+- `memory_status` — Show legacy and Markdown memory counts by category/status
+- `clear_memory [legacy|markdown|both]` — Clear the selected memory store after confirmation (defaults to legacy)
+- `delete_memory <id>` — Delete one Markdown memory by its stable ID after confirmation
 
 ## Server Mode
 
@@ -234,7 +236,9 @@ Clients send JSON messages to `ws://host:8765/ws`:
 | `error` | Server → Client | `{"type": "error", "data": "Ollama unreachable"}` |
 | `command_result` | Server → Client | `{"type": "command_result", "command": "history", "data": "..."}` |
 
-Available commands: `history`, `memory`, `clear_memory`, `new_session`, `sessions`
+Available commands: `history`, `memory`, `memory_status`, `clear_memory`, `delete_memory`, `new_session`, `sessions`. Destructive commands require `confirm: true`; `clear_memory` accepts `scope` (`legacy`, `markdown`, or `both`, default `legacy`) and `delete_memory` accepts `memory_id`. For example, send `{"type":"command","command":"clear_memory","scope":"both","confirm":true}` only after confirming with the user.
+
+Markdown and combined bulk clearing are sequential, not transactional. A storage failure may leave some Markdown records deleted; command errors report the number deleted, and combined-clear errors distinguish partial Markdown deletion from a legacy clear that was not attempted, or completed Markdown deletion from a failed legacy clear.
 
 ## Avatar (VTube Studio)
 

@@ -24,6 +24,15 @@ from server.process.tts_func import (
 )
 from utils.logging import logger
 
+
+class MemoryClearError(RuntimeError):
+    """Safe summary of a clear operation that failed after preflight."""
+
+    def __init__(self, message: str, *, markdown_deleted: int = 0):
+        super().__init__(message)
+        self.user_message = message
+        self.markdown_deleted = markdown_deleted
+
 _CONTEXT_PATTERN = re.compile(r"from (.+?)(?:\.|$|,)", re.IGNORECASE)
 
 _CHARACTER_PATTERNS = [
@@ -629,9 +638,131 @@ class KuroEngine:
     def display_memory(self) -> None:
         print(self.get_formatted_memory())
 
-    def clear_memory(self) -> None:
-        self.user_memory.clear_memory()
-        logger.info("User memory cleared")
+    def get_memory_status(self) -> dict:
+        """Return counts for legacy fields and Markdown lifecycle categories."""
+        memory = getattr(getattr(self, "user_memory", None), "memory", {})
+        if not isinstance(memory, dict):
+            memory = {}
+        legacy_counts = {
+            "personal_info": len(memory.get("personal_info") or {}),
+            "preferences": len(memory.get("preferences") or {}),
+            "detailed_preferences": sum(
+                len(values)
+                for values in (memory.get("detailed_preferences") or {}).values()
+            ),
+            "important_facts": len(memory.get("important_facts") or []),
+            "topics_discussed": len(memory.get("topics_discussed") or []),
+        }
+        lifecycle_statuses = ("active", "archived", "superseded")
+        memory_types = ("fact", "preference", "experience", "temporary")
+        markdown_counts = {
+            kind: {status: 0 for status in lifecycle_statuses}
+            for kind in memory_types
+        }
+        store = getattr(self, "markdown_memory", None)
+        markdown_available = store is not None
+        markdown_warning = None
+        if store is not None:
+            try:
+                for record in store.list_memories(self.user_id):
+                    markdown_counts.setdefault(record.type, {}).setdefault(record.status, 0)
+                    markdown_counts[record.type][record.status] += 1
+                if getattr(store, "diagnostics", None):
+                    markdown_warning = (
+                        "Some Markdown memory files were skipped; counts may be incomplete."
+                    )
+            except Exception:
+                markdown_available = False
+                markdown_warning = "Markdown memory counts could not be retrieved."
+                logger.warning("Markdown memory status retrieval failed")
+        status = {
+            "legacy": {
+                "available": getattr(self, "user_memory", None) is not None,
+                "categories": legacy_counts,
+                "total": sum(legacy_counts.values()),
+            },
+            "markdown": {
+                "available": markdown_available,
+                "categories": markdown_counts,
+                "total": sum(
+                    sum(statuses.values()) for statuses in markdown_counts.values()
+                ),
+            },
+        }
+        if markdown_warning:
+            status["markdown"]["warning"] = markdown_warning
+        return status
+
+    def clear_memory(self, scope: str = "legacy", *, confirmed: bool = False) -> str:
+        """Clear the selected memory store. Callers must obtain confirmation first."""
+        if scope not in {"legacy", "markdown", "both"}:
+            raise ValueError("Memory scope must be legacy, markdown, or both")
+        if scope != "legacy" and confirmed is not True:
+            raise PermissionError("Markdown memory clearing requires confirmation")
+        outcomes = []
+        markdown_records = []
+        markdown_deleted = 0
+        if scope in {"markdown", "both"}:
+            try:
+                store = getattr(self, "markdown_memory", None)
+                if store is None:
+                    raise RuntimeError("Markdown memory store is unavailable")
+                markdown_records = list(store.list_memories(self.user_id))
+                if getattr(store, "diagnostics", None):
+                    raise RuntimeError(
+                        "Markdown memory listing contains invalid or duplicate records"
+                    )
+            except Exception as exc:
+                if scope == "both":
+                    raise MemoryClearError(
+                        "Markdown clearing failed before deletion began; legacy "
+                        "memory clearing was not attempted."
+                    ) from exc
+                raise
+            for record in markdown_records:
+                try:
+                    store.delete_memory(
+                        self.user_id, record.id, expected_version=record.version
+                    )
+                except Exception as exc:
+                    legacy_message = (
+                        " Legacy memory was not cleared." if scope == "both" else ""
+                    )
+                    raise MemoryClearError(
+                        "Markdown clearing stopped after deleting "
+                        f"{markdown_deleted} of {len(markdown_records)} records."
+                        f"{legacy_message}",
+                        markdown_deleted=markdown_deleted,
+                    ) from exc
+                markdown_deleted += 1
+            outcomes.append(f"{len(markdown_records)} Markdown memories deleted")
+        if scope in {"legacy", "both"}:
+            try:
+                self.user_memory.clear_memory()
+            except Exception as exc:
+                if scope == "both":
+                    raise MemoryClearError(
+                        "Markdown clearing completed ("
+                        f"{markdown_deleted} records deleted), but legacy memory "
+                        "clearing failed. Markdown deletions remain in effect.",
+                        markdown_deleted=markdown_deleted,
+                    ) from exc
+                raise
+            outcomes.append("legacy memory cleared")
+        logger.info("Memory clear completed for scope %s", scope)
+        return "; ".join(outcomes)
+
+    def delete_markdown_memory(
+        self, memory_id: str, *, confirmed: bool = False
+    ) -> str:
+        if confirmed is not True:
+            raise PermissionError("Markdown memory deletion requires confirmation")
+        store = getattr(self, "markdown_memory", None)
+        if store is None:
+            raise RuntimeError("Markdown memory store is unavailable")
+        record = store.get_memory(self.user_id, memory_id)
+        store.delete_memory(self.user_id, memory_id, expected_version=record.version)
+        return f"Markdown memory {memory_id} deleted"
 
     # ------------------------------------------------------------------ #
     #  Lifecycle                                                           #

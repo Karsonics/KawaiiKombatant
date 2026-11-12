@@ -10,6 +10,14 @@ python -m pytest tests/test_markdown_memory.py -q
 
 They use pytest temporary directories and synthetic content. They do not need MySQL, Ollama, GPU, audio services, Obsidian, or network access. They cover validation, CRUD/filtering, user isolation, malformed files, version conflicts, and simulated atomic-write failures. The suite does not prove cross-process safety or every operating-system permission behavior.
 
+Memory management and command confirmation use temporary Markdown vaults and fakes:
+
+```bash
+python -m pytest tests/test_memory_management.py -q
+```
+
+These tests cover status counts, scoped clearing, stable-ID deletion, unavailable stores, failures, and confirmation safeguards.
+
 Automatic capture uses fake extraction responses and a temporary Markdown vault:
 
 ```bash

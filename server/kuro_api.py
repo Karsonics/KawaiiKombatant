@@ -11,6 +11,7 @@ import uvicorn
 from server.kuro_engine import KuroEngine
 from server.api_listener import parse_api_server_args
 from server.api_routes import create_health_handler, register_api_routes
+from server.memory_commands import handle_memory_command
 from server.process.asr_func.asr_push_to_talk import transcribe_bytes as asr_transcribe
 from utils.logging import logger
 
@@ -178,7 +179,13 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                         }
                     )
                 else:
-                    result_data = _handle_command(cmd, session_id)
+                    result_data = _handle_command(
+                        cmd,
+                        session_id,
+                        scope=msg.get("scope", "legacy"),
+                        memory_id=msg.get("memory_id"),
+                        confirmed=msg.get("confirm") is True,
+                    )
                     if isinstance(result_data, str):
                         await ws.send_json(
                             {
@@ -231,12 +238,26 @@ async def _broadcast_mood(mood: str, emotion: float) -> None:
     _mood_subscribers.difference_update(dead)
 
 
-def _handle_command(cmd: str, session_id: str | None) -> str | dict:
+def _handle_command(
+    cmd: str,
+    session_id: str | None,
+    *,
+    scope: str = "legacy",
+    memory_id: str | None = None,
+    confirmed: bool = False,
+) -> str | dict:
+    memory_result = handle_memory_command(
+        engine,
+        cmd,
+        scope=scope,
+        memory_id=memory_id,
+        confirmed=confirmed,
+        logger=logger,
+    )
+    if memory_result is not None:
+        return memory_result
     if cmd == "memory":
         return engine.get_formatted_memory()
-    elif cmd == "clear_memory":
-        engine.clear_memory()
-        return "Memory cleared"
     elif cmd == "new_session":
         sid = engine.create_session()
         return f"New session created: {sid[:8]}..."
