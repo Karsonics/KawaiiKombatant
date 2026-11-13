@@ -7,12 +7,16 @@ from utils.logging import logger
 
 
 def run_direct(dry_run: bool = False, voice: str = None) -> None:
-    from server.kuro_engine import KuroEngine
+    from server.kuro_engine import KuroEngine, MemoryClearError
 
     engine = KuroEngine(dry_run=dry_run, voice_override=voice)
     engine.display_memory()
     session_id = _pick_session(engine)
-    print("\nCommands: 'exit' | 'history' | 'memory' | 'clear_memory'\n")
+    print(
+        "\nCommands: 'exit' | 'history' | 'memory' | 'memory_status' | "
+        "'memory_review' | 'confirm_memory <id>' | "
+        "'clear_memory [legacy|markdown|both]' | 'delete_memory <id>'\n"
+    )
 
     while True:
         user_input = input("You: ").strip()
@@ -32,10 +36,69 @@ def run_direct(dry_run: bool = False, voice: str = None) -> None:
             engine.display_memory()
             continue
 
-        if user_input.lower() == "clear_memory":
-            if input("Clear ALL user memory? (yes/no): ").lower() == "yes":
-                engine.clear_memory()
-                print("Memory cleared")
+        if user_input.lower() == "memory_status":
+            print(engine.get_memory_status())
+            continue
+
+        if user_input.lower() == "memory_review":
+            print(engine.get_memory_review())
+            continue
+
+        command_parts = user_input.split()
+        if command_parts[0].lower() == "clear_memory":
+            if len(command_parts) > 2:
+                print("Use clear_memory [legacy|markdown|both]")
+                continue
+            scope = command_parts[1].lower() if len(command_parts) > 1 else "legacy"
+            if scope not in {"legacy", "markdown", "both"}:
+                print("Use clear_memory [legacy|markdown|both]")
+                continue
+            confirmed = input(
+                f"Clear {scope} memory? Type yes to confirm: "
+            ).strip().lower() == "yes"
+            if confirmed:
+                try:
+                    print(engine.clear_memory(scope=scope, confirmed=True))
+                except MemoryClearError as exc:
+                    print(exc.user_message)
+                except Exception:
+                    print("Unable to clear the requested memory.")
+            continue
+
+        if command_parts[0].lower() == "delete_memory":
+            if len(command_parts) != 2:
+                print("Use delete_memory <memory-id>")
+                continue
+            confirmed = input(
+                f"Delete Markdown memory {command_parts[1]}? Type yes to confirm: "
+            ).strip().lower() == "yes"
+            if confirmed:
+                try:
+                    print(
+                        engine.delete_markdown_memory(
+                            command_parts[1], confirmed=True
+                        )
+                    )
+                except Exception:
+                    print("Unable to delete the requested Markdown memory.")
+            continue
+
+        if command_parts[0].lower() == "confirm_memory":
+            if len(command_parts) != 2:
+                print("Use confirm_memory <memory-id>")
+                continue
+            confirmed = input(
+                f"Confirm Markdown memory {command_parts[1]}? Type yes: "
+            ).strip().lower() == "yes"
+            if confirmed:
+                try:
+                    print(
+                        engine.confirm_markdown_memory(
+                            command_parts[1], confirmed=True
+                        )
+                    )
+                except Exception:
+                    print("Unable to confirm the requested memory.")
             continue
 
         try:
@@ -87,7 +150,10 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
     async with ws:
         session_id = None
         print(
-            "\nCommands: 'exit' | 'history' | 'memory' | 'clear_memory' | 'new_session'\n"
+            "\nCommands: 'exit' | 'history' | 'memory' | 'memory_status' | "
+            "'memory_review' | 'confirm_memory <id>' | "
+            "'clear_memory [legacy|markdown|both]' | 'delete_memory <id>' | "
+            "'new_session'\n"
         )
 
         while True:
@@ -99,25 +165,66 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
                 print("Goodbye!")
                 break
 
-            if user_input.lower() in (
+            command_parts = user_input.split()
+            command_name = command_parts[0].lower()
+            if command_name in (
                 "history",
                 "memory",
                 "clear_memory",
+                "memory_status",
+                "memory_review",
+                "confirm_memory",
+                "delete_memory",
                 "new_session",
                 "sessions",
             ):
-                await ws.send(
-                    json.dumps(
-                        {
-                            "type": "command",
-                            "command": user_input.lower(),
-                        }
+                payload = {"type": "command", "command": command_name}
+                if command_name == "clear_memory":
+                    if len(command_parts) > 2:
+                        print("Use clear_memory [legacy|markdown|both]")
+                        continue
+                    scope = (
+                        command_parts[1].lower()
+                        if len(command_parts) > 1
+                        else "legacy"
                     )
-                )
+                    if scope not in {"legacy", "markdown", "both"}:
+                        print("Use clear_memory [legacy|markdown|both]")
+                        continue
+                    confirmed = input(
+                        f"Clear {scope} memory? Type yes to confirm: "
+                    ).strip().lower() == "yes"
+                    if not confirmed:
+                        continue
+                    payload.update(scope=scope, confirm=True)
+                elif command_name == "delete_memory":
+                    if len(command_parts) != 2:
+                        print("Use delete_memory <memory-id>")
+                        continue
+                    payload["memory_id"] = command_parts[1]
+                    confirmed = input(
+                        f"Delete Markdown memory {command_parts[1]}? "
+                        "Type yes to confirm: "
+                    ).strip().lower() == "yes"
+                    if not confirmed:
+                        continue
+                    payload["confirm"] = True
+                elif command_name == "confirm_memory":
+                    if len(command_parts) != 2:
+                        print("Use confirm_memory <memory-id>")
+                        continue
+                    payload["memory_id"] = command_parts[1]
+                    confirmed = input(
+                        f"Confirm Markdown memory {command_parts[1]}? Type yes: "
+                    ).strip().lower() == "yes"
+                    if not confirmed:
+                        continue
+                    payload["confirm"] = True
+                await ws.send(json.dumps(payload))
                 resp = json.loads(await ws.recv())
                 if resp.get("type") == "command_result":
                     print(f"\n{resp['data']}\n")
-                    if user_input.lower() == "new_session":
+                    if command_name == "new_session":
                         session_id = None
                 elif resp.get("type") == "error":
                     print(f"\n[Error] {resp['data']}\n")
