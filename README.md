@@ -68,9 +68,9 @@ relevant active facts, preferences, and experiences and adds them to the model
 context. When the vault is available, Kuro also automatically asks the
 configured `llm.extraction_model` to identify durable, explicitly stated,
 non-sensitive facts, preferences, and experiences in each user message. Only
-exact quotations that pass strict format, confidence, and privacy checks are
-saved. Duplicates and possible conflicts are skipped without changing existing
-notes. Set `memory.capture_enabled: false` to disable capture while keeping
+  exact quotations that pass strict format, confidence, and privacy checks are
+  saved. Duplicates and possible conflicts are skipped without changing existing
+  notes and can be inspected with `memory_review`. Set `memory.capture_enabled: false` to disable capture while keeping
 retrieval. Extraction or storage failures do not block chat. Messages are sent
 to the configured LLM provider for extraction, which may be remote. Conversation
 transcripts and session summaries remain in MySQL.
@@ -81,6 +81,20 @@ Retrieval can be limited with `memory.retrieval_limit` (default 5, maximum 20)
 and `memory.max_context_chars` (default 4000, maximum 12000). Set
 `memory.enabled: false` to disable the vault. Retrieved note text is treated as
 reference data and does not become an instruction source.
+
+The complete untrusted reference block sent to the chat model is separately
+limited by `memory.max_reference_context_chars` (default 6000 characters;
+valid range 384–20000). It counts wrappers, labels, and separators and gives
+priority to Markdown memories, then the current session summary, then legacy
+user memory. If content is omitted or clipped at a line/word boundary, the
+block includes a truncation marker. This does not affect the system prompt,
+transcript turns, or stored data.
+
+An optional record `expires` value is a UTC cutoff: an active memory stops being
+retrieved at or after that time. A missing (`null`) expiry means no cutoff;
+expiration does not delete the record. `last_confirmed` is set only when the
+user explicitly confirms a record with `confirm_memory <id>`, not when Kuro
+retrieves or hears it again.
 
 ### Changing the Character
 
@@ -124,6 +138,10 @@ the user-level preferences and facts stored by `UserMemory`. Existing legacy
 `llm.extraction_model`. For backward compatibility, an omitted summarization
 model falls back to `extraction_model`, then the main `model`. A summarization
 failure is logged and does not prevent the conversation turn from completing.
+Same-session summary generation is serialized within an engine, while MySQL
+conditional writes prevent stale writers from replacing a newer checkpoint
+across processes. Conflicted transcript messages remain eligible for a later
+summary attempt.
 
 ```yaml
 chat:
@@ -205,6 +223,8 @@ While the bot is running:
 - `history` — Show full conversation history
 - `memory` — Display stored user memories
 - `memory_status` — Show legacy and Markdown memory counts by category/status
+- `memory_review` — Review deterministic candidates for duplicate, related, conflicting, or potentially outdated Markdown memories
+- `confirm_memory <id>` — Explicitly confirm a Markdown record and update its confirmation timestamp
 - `clear_memory [legacy|markdown|both]` — Clear the selected memory store after confirmation (defaults to legacy)
 - `delete_memory <id>` — Delete one Markdown memory by its stable ID after confirmation
 
@@ -236,7 +256,12 @@ Clients send JSON messages to `ws://host:8765/ws`:
 | `error` | Server → Client | `{"type": "error", "data": "Ollama unreachable"}` |
 | `command_result` | Server → Client | `{"type": "command_result", "command": "history", "data": "..."}` |
 
-Available commands: `history`, `memory`, `memory_status`, `clear_memory`, `delete_memory`, `new_session`, `sessions`. Destructive commands require `confirm: true`; `clear_memory` accepts `scope` (`legacy`, `markdown`, or `both`, default `legacy`) and `delete_memory` accepts `memory_id`. For example, send `{"type":"command","command":"clear_memory","scope":"both","confirm":true}` only after confirming with the user.
+Memory management commands return structured objects for every handled outcome.
+Successful and confirmation-pending responses use `command_result`; failures use
+`error`. For example, a successful confirmation is returned as
+`{"type":"command_result","command":"confirm_memory","data":"Markdown memory mem-000001 confirmed"}`.
+
+Available commands: `history`, `memory`, `memory_status`, `memory_review`, `confirm_memory`, `clear_memory`, `delete_memory`, `new_session`, `sessions`. `memory_review` scans Markdown records and returns deterministic, non-destructive relationship candidates; correction candidates from the latest capture are held only in the current process. Review never modifies records. Send `confirm_memory` with `memory_id` and `confirm: true` only after the user explicitly confirms that record's content. Destructive commands require `confirm: true`; `clear_memory` accepts `scope` (`legacy`, `markdown`, or `both`, default `legacy`) and `delete_memory` accepts `memory_id`. For example, send `{"type":"command","command":"clear_memory","scope":"both","confirm":true}` only after confirming with the user.
 
 Markdown and combined bulk clearing are sequential, not transactional. A storage failure may leave some Markdown records deleted; command errors report the number deleted, and combined-clear errors distinguish partial Markdown deletion from a legacy clear that was not attempted, or completed Markdown deletion from a failed legacy clear.
 

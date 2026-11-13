@@ -299,12 +299,17 @@ def test_partial_bulk_delete_reports_completed_count_without_exception_details(
         def list_memories(self, user_id):
             return store.list_memories(user_id)
 
-        def delete_memory(self, user_id, memory_id, *, expected_version):
+        def delete_memory(
+            self, user_id, memory_id, *, expected_version, confirmed=False
+        ):
             self.delete_calls += 1
             if self.delete_calls == 2:
                 raise OSError("private storage detail")
             return store.delete_memory(
-                user_id, memory_id, expected_version=expected_version
+                user_id,
+                memory_id,
+                expected_version=expected_version,
+                confirmed=confirmed,
             )
 
     engine.markdown_memory = FailAfterOneDelete()
@@ -376,6 +381,56 @@ def test_delete_uses_stable_id_and_missing_id_is_reported(tmp_path):
         engine.delete_markdown_memory("../invalid", confirmed=True)
 
 
+def test_explicit_memory_confirmation_updates_metadata_with_version_safety(tmp_path):
+    engine = make_engine(tmp_path)
+    record = engine.markdown_memory.create_memory(
+        engine.user_id, "fact", "Synthetic inferred fact", epistemic_status="inferred"
+    )
+
+    with pytest.raises(PermissionError):
+        engine.confirm_markdown_memory(record.id)
+    assert engine.markdown_memory.get_memory(engine.user_id, record.id) == record
+
+    result = engine.confirm_markdown_memory(record.id, confirmed=True)
+    confirmed = engine.markdown_memory.get_memory(engine.user_id, record.id)
+
+    assert result == f"Markdown memory {record.id} confirmed"
+    assert confirmed.epistemic_status == "confirmed"
+    assert confirmed.last_confirmed is not None
+    assert confirmed.version != record.version
+
+
+def test_confirm_memory_command_requires_confirmation_before_store_access(tmp_path):
+    engine = make_engine(tmp_path)
+    record = engine.markdown_memory.create_memory(
+        engine.user_id, "fact", "Synthetic fact"
+    )
+    response = handle_memory_command(
+        engine,
+        "confirm_memory",
+        memory_id=record.id,
+        logger=FakeLogger(),
+    )
+
+    assert response["data"]["confirmation_required"] is True
+    assert engine.markdown_memory.get_memory(engine.user_id, record.id) == record
+
+    confirmed = handle_memory_command(
+        engine,
+        "confirm_memory",
+        memory_id=record.id,
+        confirmed=True,
+        logger=FakeLogger(),
+    )
+
+    assert confirmed == {
+        "type": "command_result",
+        "command": "confirm_memory",
+        "data": f"Markdown memory {record.id} confirmed",
+    }
+    assert engine.markdown_memory.get_memory(engine.user_id, record.id).last_confirmed
+
+
 def test_command_confirmation_prevents_mutation_until_explicitly_confirmed(tmp_path):
     engine = make_engine(tmp_path, {"preferences": {"food": "tea"}})
     logger = FakeLogger()
@@ -390,7 +445,11 @@ def test_command_confirmation_prevents_mutation_until_explicitly_confirmed(tmp_p
     confirmed = handle_memory_command(
         engine, "clear_memory", scope="legacy", confirmed=True, logger=logger
     )
-    assert confirmed == "legacy memory cleared"
+    assert confirmed == {
+        "type": "command_result",
+        "command": "clear_memory",
+        "data": "legacy memory cleared",
+    }
     assert engine.user_memory.clear_calls == 1
 
 
@@ -403,9 +462,14 @@ def test_delete_command_confirmation_and_failure_handling(tmp_path):
     )
     assert pending["data"]["confirmation_required"] is True
     assert engine.markdown_memory.get_memory(engine.user_id, record.id)
-    assert handle_memory_command(
+    deleted = handle_memory_command(
         engine, "delete_memory", memory_id=record.id, confirmed=True, logger=logger
-    ).endswith("deleted")
+    )
+    assert deleted == {
+        "type": "command_result",
+        "command": "delete_memory",
+        "data": f"Markdown memory {record.id} deleted",
+    }
     assert handle_memory_command(engine, "delete_memory", logger=logger)["type"] == "error"
 
     failure = handle_memory_command(

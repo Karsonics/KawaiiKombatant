@@ -11,7 +11,7 @@ import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import yaml
 
@@ -42,6 +42,7 @@ _METADATA_KEYS = {
 }
 _LOCKS_GUARD = threading.Lock()
 _VAULT_LOCKS: dict[str, threading.RLock] = {}
+_UNSET = object()
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -112,13 +113,21 @@ class MarkdownMemoryStore:
     """Store one validated memory per Markdown file in an explicit vault.
 
     Writes are serialized within this process. Version checks detect edits made
-    since a record was read. This is not a multi-process locking guarantee.
+    since a record was read. Search excludes records at or past their UTC expiry
+    instant without changing the files. This is not a multi-process locking
+    guarantee.
     """
 
-    def __init__(self, vault_path: str | os.PathLike[str]) -> None:
+    def __init__(
+        self,
+        vault_path: str | os.PathLike[str],
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         if vault_path is None or not str(vault_path).strip():
             raise VaultError("An explicit, non-empty vault path is required")
         self.vault_path = Path(vault_path).expanduser().resolve()
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
         lock_key = os.path.normcase(str(self.vault_path))
         with _LOCKS_GUARD:
             self._lock = _VAULT_LOCKS.setdefault(lock_key, threading.RLock())
@@ -318,9 +327,15 @@ class MarkdownMemoryStore:
         if not terms:
             return []
         records = self.list_memories(user_id, active=True)
+        now = self._clock()
+        if not isinstance(now, datetime) or now.tzinfo is None:
+            raise ValueError("clock must return a timezone-aware datetime")
+        now = now.astimezone(timezone.utc)
         scored: list[tuple[int, str, MemoryRecord]] = []
         for record in records:
             if record.type not in {"fact", "preference", "experience"}:
+                continue
+            if _is_expired(record, now):
                 continue
             text = f"{record.type} {' '.join(record.tags)} {record.content}".casefold()
             words = re.findall(r"[a-z0-9]+", text)
@@ -348,12 +363,15 @@ class MarkdownMemoryStore:
         memory_type: str | None = None,
         epistemic_status: str | None = None,
         status: str | None = None,
-        source_session: str | None = None,
-        last_confirmed: str | None = None,
-        expires: str | None = None,
+        source_session: str | None | object = _UNSET,
+        last_confirmed: str | None | object = _UNSET,
+        expires: str | None | object = _UNSET,
         tags: Iterable[str] | None = None,
+        confirmed: bool = False,
     ) -> MemoryRecord:
         """Update a previously read record, rejecting stale file versions."""
+        if status is not None and status != record.status and confirmed is not True:
+            raise PermissionError("Memory lifecycle changes require confirmation")
         self._validate_id(record.id)
         self._user_dir(record.user_id)
         if not record.version:
@@ -382,16 +400,16 @@ class MarkdownMemoryStore:
                 status=status if status is not None else current.status,
                 content=content if content is not None else current.content,
                 source_session=(
-                    source_session
-                    if source_session is not None
-                    else current.source_session
+                    current.source_session
+                    if source_session is _UNSET
+                    else source_session
                 ),
                 last_confirmed=(
-                    last_confirmed
-                    if last_confirmed is not None
-                    else current.last_confirmed
+                    current.last_confirmed
+                    if last_confirmed is _UNSET
+                    else last_confirmed
                 ),
-                expires=expires if expires is not None else current.expires,
+                expires=current.expires if expires is _UNSET else expires,
                 tags=tuple(tags) if tags is not None else current.tags,
                 updated=_utc_now(),
                 version=None,
@@ -434,8 +452,15 @@ class MarkdownMemoryStore:
             return self._read_path(path, record.user_id)
 
     def delete_memory(
-        self, user_id: str, memory_id: str, *, expected_version: str
+        self,
+        user_id: str,
+        memory_id: str,
+        *,
+        expected_version: str,
+        confirmed: bool = False,
     ) -> None:
+        if confirmed is not True:
+            raise PermissionError("Memory deletion requires confirmation")
         self._validate_id(memory_id)
         if not self.vault_path.is_dir():
             raise VaultError("Vault is missing or unavailable")
@@ -660,6 +685,22 @@ def _validate_timestamp(value: str | None, *, nullable: bool) -> None:
         raise InvalidMemoryError("Timestamp is not valid ISO-8601") from exc
     if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
         raise InvalidMemoryError("Timestamps must use UTC")
+
+
+def _is_expired(record: MemoryRecord, now: datetime) -> bool:
+    """Treat expiry as an exclusive UTC cutoff; malformed values fail closed."""
+    if record.expires is None:
+        return False
+    try:
+        expires = datetime.fromisoformat(record.expires.replace("Z", "+00:00"))
+        if (
+            expires.tzinfo is None
+            or expires.utcoffset() != timezone.utc.utcoffset(expires)
+        ):
+            return True
+        return expires.astimezone(timezone.utc) <= now
+    except (AttributeError, TypeError, ValueError):
+        return True
 
 
 def _validate_optional_metadata(record: MemoryRecord) -> None:

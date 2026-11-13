@@ -14,6 +14,7 @@ def run_direct(dry_run: bool = False, voice: str = None) -> None:
     session_id = _pick_session(engine)
     print(
         "\nCommands: 'exit' | 'history' | 'memory' | 'memory_status' | "
+        "'memory_review' | 'confirm_memory <id>' | "
         "'clear_memory [legacy|markdown|both]' | 'delete_memory <id>'\n"
     )
 
@@ -37,6 +38,10 @@ def run_direct(dry_run: bool = False, voice: str = None) -> None:
 
         if user_input.lower() == "memory_status":
             print(engine.get_memory_status())
+            continue
+
+        if user_input.lower() == "memory_review":
+            print(engine.get_memory_review())
             continue
 
         command_parts = user_input.split()
@@ -76,6 +81,24 @@ def run_direct(dry_run: bool = False, voice: str = None) -> None:
                     )
                 except Exception:
                     print("Unable to delete the requested Markdown memory.")
+            continue
+
+        if command_parts[0].lower() == "confirm_memory":
+            if len(command_parts) != 2:
+                print("Use confirm_memory <memory-id>")
+                continue
+            confirmed = input(
+                f"Confirm Markdown memory {command_parts[1]}? Type yes: "
+            ).strip().lower() == "yes"
+            if confirmed:
+                try:
+                    print(
+                        engine.confirm_markdown_memory(
+                            command_parts[1], confirmed=True
+                        )
+                    )
+                except Exception:
+                    print("Unable to confirm the requested memory.")
             continue
 
         try:
@@ -128,6 +151,7 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
         session_id = None
         print(
             "\nCommands: 'exit' | 'history' | 'memory' | 'memory_status' | "
+            "'memory_review' | 'confirm_memory <id>' | "
             "'clear_memory [legacy|markdown|both]' | 'delete_memory <id>' | "
             "'new_session'\n"
         )
@@ -148,6 +172,8 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
                 "memory",
                 "clear_memory",
                 "memory_status",
+                "memory_review",
+                "confirm_memory",
                 "delete_memory",
                 "new_session",
                 "sessions",
@@ -179,6 +205,17 @@ async def run_ws(host: str = "localhost", port: int = 8765) -> None:
                     confirmed = input(
                         f"Delete Markdown memory {command_parts[1]}? "
                         "Type yes to confirm: "
+                    ).strip().lower() == "yes"
+                    if not confirmed:
+                        continue
+                    payload["confirm"] = True
+                elif command_name == "confirm_memory":
+                    if len(command_parts) != 2:
+                        print("Use confirm_memory <memory-id>")
+                        continue
+                    payload["memory_id"] = command_parts[1]
+                    confirmed = input(
+                        f"Confirm Markdown memory {command_parts[1]}? Type yes: "
                     ).strip().lower() == "yes"
                     if not confirmed:
                         continue

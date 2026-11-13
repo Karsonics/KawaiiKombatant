@@ -28,11 +28,44 @@ The engine expects local MySQL settings at `configs/database_config.yaml`; this 
 
 `llm.summarization_model` is an optional model setting for per-session conversation summaries. It is independent of `llm.extraction_model` when explicitly set. For older configuration files, it defaults to `llm.extraction_model`, then `llm.model`; personal-information extraction continues to use `llm.extraction_model`. Session summaries are stored in MySQL by session ID and are loaded only for that session. Summary failures do not prevent an ordinary conversation turn.
 
-### Standalone Markdown memory store
+Summary checkpoints are stored with the cumulative summary in the existing
+`session_summaries.summary` text field as a versioned JSON envelope. The
+checkpoint is the last summarized transcript message ID; older plain-text rows
+are read as summaries with checkpoint zero. Once the configured threshold of
+new completed user/assistant messages is reached, the summarizer receives the
+previous summary and only the new completed segment. Empty output, provider
+failure, a failed write, or a compare-and-set conflict leaves the previously
+stored summary/checkpoint intact. A process-wide, reference-counted per-session
+reentrant lock covers the full `process_message()` turn, including user and
+assistant transcript writes and summary processing. Idle locks are removed;
+different sessions do not block one another. The built-in API uses one worker
+by default. Turn serialization is process-local, so multiple Python processes
+must not process the same session concurrently. MySQL summary writes compare
+the exact raw TEXT value byte-for-byte, including legacy plain-text rows, and
+reject older checkpoints. Missing rows use insert-only initialization; an
+existing SQL NULL row is updated only while it remains NULL. Thus summary CAS
+protects multi-process writes, but it does not serialize the conversation
+turns themselves across processes. A losing writer does not report success;
+its transcript exchanges remain beyond the stored checkpoint and can be picked
+up by a later summary attempt.
+Queries sort by timestamp and then the existing auto-increment message ID, so
+equal timestamps have stable chronological order. There is no schema migration.
+The model can still omit details when it writes a cumulative summary; checkpoint
+tracking prevents repeated transcript slices but cannot guarantee semantic
+retention by the model.
+
+`UserMemory.flush()` retains its dirty state unless persistence succeeds. A
+failed connection or write returns a safe failure result, logs no memory
+values, and leaves the change available for a later flush. The engine continues
+without a database using its existing in-memory fallback, but unsaved changes
+in that fallback are process-local and are lost on exit. There are no automatic
+retry loops or background workers.
+
+### Markdown long-term memory
 
 Set `memory.vault_path` in `configs/bot_config.yaml` to an explicit absolute
-path before enabling the Markdown vault. The checked-in value is empty and no
-fallback is used. At startup Kuro initializes the configured vault and its one
+path before enabling the Markdown vault. No default or fallback path is used.
+At startup Kuro initializes the configured vault and its one
 effective `chat.user_id`; if the setting is omitted, the existing
 `default_user` fallback is used. Explicitly supplied invalid user IDs fail
 configuration validation. If the vault path is absent, blank, relative, or
@@ -57,6 +90,63 @@ performed. Set `memory.enabled: false` to disable the vault.
 optional, and the storage component does not support cross-process write
 coordination. Never use an engineering documentation directory or a personal
 vault containing unrelated notes as the memory path.
+
+`memory.max_reference_context_chars` sets the overall character budget for the
+single untrusted reference block sent with a chat request. It defaults to 6000
+characters and accepts values from 384 through 20000; missing values use the
+default, and invalid values also fall back to it with a content-free warning.
+The budget includes the block wrapper, section labels, and separators. The
+engine allocates space in this order: relevant Markdown memories, the current
+session summary, then legacy `UserMemory`. It keeps complete records/sections
+when possible. If content does not fit, the final included section is clipped
+at a line or word boundary and receives a visible truncation marker; lower
+priority sections may be omitted. Truncation affects only prompt text and never
+changes stored memory or summaries. The configured character/personality system
+prompt, transcript messages, and their contents are outside this budget. This
+is a character count, not a model-token limit. Before budgeting, the engine
+escapes case-insensitive `<untrusted_reference>`-like opening and closing tags
+in every source, including variants with whitespace around the tag name or
+slash. Escaped text remains readable but cannot create another structural
+reference boundary; the escaped characters count toward the same total limit.
+
+An `expires` timestamp is an exclusive UTC cutoff: an active memory is eligible
+for retrieval only while the current UTC time is earlier than that timestamp.
+`expires: null` means no expiration. Expiration only filters retrieval; it does
+not delete, archive, or rewrite the Markdown file. Markdown timestamps must be
+ISO-8601 UTC (`Z` or a zero UTC offset). Malformed records are skipped and
+reported through store diagnostics rather than being treated as unexpired.
+
+`last_confirmed` records the time the user explicitly reviewed and confirmed a
+memory. Kuro does not refresh it when a memory is retrieved or merely mentioned.
+Use `confirm_memory <id>` in the CLI or WebSocket command and explicitly confirm
+the request; this updates the timestamp and epistemic status using the current
+record version. Storage callers can clear nullable `source_session`,
+`last_confirmed`, or `expires` fields by explicitly passing `None` to
+`update_memory()`; omitting those arguments preserves their current values.
+Changing a record's lifecycle status through `update_memory()` requires
+`confirmed=True`; storage callers should obtain explicit user approval first.
+
+Capture compares new candidates with active records using deterministic lexical
+rules. Exact/near duplicates, possible preference conflicts, and explicit
+correction candidates are not saved over existing records. `memory_review`
+shows relevant stored IDs, candidate text, and an explanation. Correction cues
+are heuristic; a statement that looks like a correction is only a
+`potential_correction`, while contradictions without clear cue words remain
+`potential_conflict`. Additive preferences for a different context can be saved
+as separate records. Pending candidates exist only in the running engine and
+are replaced by a later capture or lost on restart. Review is manual; it does
+not update, archive, supersede, or delete records. Existing clear/delete
+commands still require explicit confirmation.
+
+Use the `memory_review` CLI or WebSocket command to scan the configured Markdown
+vault for deterministic pairwise candidates: likely duplicates, related topic
+records, and potentially conflicting preferences. Expired timestamps, temporal
+wording, and archived/superseded statuses can mark a candidate as potentially outdated. This
+is a lexical review aid, not semantic truth detection: related records are not
+assumed to conflict. It displays the candidate records and explanation without
+changing IDs, contents, or lifecycle status. If malformed or duplicate files
+are skipped, the response marks the review incomplete. It is separate from
+normal retrieval and does not call an LLM.
 
 Do not put secrets into tracked files. Inspect `.gitignore` before adding local configuration, and do not share configuration contents or logs without checking them for credentials and user data.
 

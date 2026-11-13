@@ -1,6 +1,7 @@
 from server.process.storage.mysql_storage import MySQLConversationStorage
 import json
 from typing import Dict, Optional
+from utils.logging import logger
 
 
 class UserMemory:
@@ -34,6 +35,7 @@ class UserMemory:
                 modified = True
 
         if modified:
+            self._dirty = True
             self.save_memory()
 
     def _load_memory(self) -> Dict:
@@ -65,16 +67,17 @@ class UserMemory:
             cursor.close()
             connection.close()
 
-    def save_memory(self, *, raise_on_unavailable: bool = False) -> None:
+    def save_memory(self, *, raise_on_unavailable: bool = False) -> bool:
         try:
             connection = self.storage._get_connection()
         except Exception:
             if raise_on_unavailable:
                 raise
-            return
-        cursor = connection.cursor()
+            return False
+        cursor = None
 
         try:
+            cursor = connection.cursor()
             table_name = self.storage.config["tables"]["user_preferences"]
             memory_json = json.dumps(self.memory)
 
@@ -87,14 +90,33 @@ class UserMemory:
             """
             cursor.execute(query, (self.user_id, memory_json))
             connection.commit()
+        except Exception:
+            if connection:
+                connection.rollback()
+            raise
         finally:
-            cursor.close()
+            if cursor:
+                cursor.close()
             connection.close()
+        self._dirty = False
+        return True
 
-    def flush(self) -> None:
-        if self._dirty:
-            self.save_memory()
-            self._dirty = False
+    def flush(self) -> bool:
+        if not self._dirty:
+            return True
+        try:
+            saved = self.save_memory(raise_on_unavailable=True)
+        except Exception:
+            logger.warning(
+                "User memory persistence failed; pending changes remain dirty"
+            )
+            return False
+        if not saved:
+            logger.warning(
+                "User memory persistence unavailable; pending changes remain dirty"
+            )
+            return False
+        return True
 
     def add_preference(self, category: str, value: str, context: str = None) -> None:
         if context:

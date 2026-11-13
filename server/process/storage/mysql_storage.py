@@ -159,19 +159,19 @@ class MySQLConversationStorage:
 
             if limit:
                 query = f"""
-                SELECT role, content, timestamp, metadata
+                SELECT id, role, content, timestamp, metadata
                 FROM {table_name}
                 WHERE session_id = %s
-                ORDER BY timestamp DESC
+                ORDER BY timestamp DESC, id DESC
                 LIMIT %s
                 """
                 cursor.execute(query, (session_id, limit))
             else:
                 query = f"""
-                SELECT role, content, timestamp, metadata
+                SELECT id, role, content, timestamp, metadata
                 FROM {table_name}
                 WHERE session_id = %s
-                ORDER BY timestamp ASC
+                ORDER BY timestamp ASC, id ASC
                 """
                 cursor.execute(query, (session_id,))
 
@@ -202,6 +202,42 @@ class MySQLConversationStorage:
         self, session_id: str, context_length: int = 10
     ) -> List[Dict]:
         return self.get_conversation_history(session_id, limit=context_length)
+
+    def get_messages_after(
+        self, session_id: str, message_id: int
+    ) -> List[Dict]:
+        """Return messages after a stable checkpoint in chronological order."""
+        connection = None
+        cursor = None
+        try:
+            connection = self._get_connection()
+            cursor = connection.cursor(dictionary=True)
+            table_name = self.config["tables"]["conversations"]
+            cursor.execute(
+                f"""
+                SELECT id, role, content, timestamp, metadata
+                FROM {table_name}
+                WHERE session_id = %s AND id > %s
+                ORDER BY timestamp ASC, id ASC
+                """,
+                (session_id, message_id),
+            )
+            results = cursor.fetchall()
+            for result in results:
+                if result["metadata"]:
+                    try:
+                        result["metadata"] = json.loads(result["metadata"])
+                    except (json.JSONDecodeError, TypeError):
+                        result["metadata"] = None
+            return results
+        except Error as e:
+            logger.error("Error retrieving messages after summary checkpoint: %s", e)
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
 
     def update_character_state(
         self, session_id: str, mood: str, emotion_level: float, context_summary: str
@@ -305,6 +341,11 @@ class MySQLConversationStorage:
         )
 
     def get_session_summary(self, session_id: str) -> Optional[str]:
+        state = self.get_session_summary_state(session_id)
+        return state["summary"]
+
+    def get_session_summary_state(self, session_id: str) -> dict:
+        """Read a summary and checkpoint, treating old plain text as checkpoint 0."""
         connection = None
         cursor = None
         try:
@@ -316,7 +357,44 @@ class MySQLConversationStorage:
                 (session_id,),
             )
             row = cursor.fetchone()
-            return row[0] if row else None
+            if row is None:
+                return {
+                    "summary": None,
+                    "last_message_id": 0,
+                    "storage_value": None,
+                    "row_exists": False,
+                }
+            raw_summary = row[0]
+            if raw_summary is None:
+                return {
+                    "summary": None,
+                    "last_message_id": 0,
+                    "storage_value": None,
+                    "row_exists": True,
+                }
+            try:
+                envelope = json.loads(raw_summary)
+            except (json.JSONDecodeError, TypeError):
+                envelope = None
+            if (
+                isinstance(envelope, dict)
+                and envelope.get("format") == "kuro-session-summary-v1"
+                and isinstance(envelope.get("summary"), str)
+                and type(envelope.get("last_message_id")) is int
+                and envelope["last_message_id"] >= 0
+            ):
+                return {
+                    "summary": envelope["summary"],
+                    "last_message_id": envelope["last_message_id"],
+                    "storage_value": raw_summary,
+                    "row_exists": True,
+                }
+            return {
+                "summary": raw_summary,
+                "last_message_id": 0,
+                "storage_value": raw_summary,
+                "row_exists": True,
+            }
         except Error as e:
             logger.error("Error retrieving session summary: %s", e)
             raise
@@ -347,6 +425,117 @@ class MySQLConversationStorage:
             logger.error("Error saving session summary: %s", e)
             if connection:
                 connection.rollback()
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def set_session_summary_state(
+        self, session_id: str, summary: str, last_message_id: int
+    ) -> None:
+        """Persist cumulative summary state in the existing TEXT column."""
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("A non-empty session summary is required")
+        if type(last_message_id) is not int or last_message_id < 0:
+            raise ValueError("Summary checkpoint must be a non-negative message ID")
+        envelope = json.dumps(
+            {
+                "format": "kuro-session-summary-v1",
+                "summary": summary,
+                "last_message_id": last_message_id,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        self.set_session_summary(session_id, envelope)
+
+    def compare_and_set_session_summary_state(
+        self,
+        session_id: str,
+        summary: str,
+        last_message_id: int,
+        expected_storage_value: Optional[str],
+        *,
+        expected_row_exists: Optional[bool] = None,
+    ) -> bool:
+        """Save only if the exact previously-read row value is still current.
+
+        An absent row is inserted normally; a competing first insert is reported
+        as a conflict. Comparing the raw TEXT value also supports legacy rows.
+        """
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("A non-empty session summary is required")
+        if type(last_message_id) is not int or last_message_id < 0:
+            raise ValueError("Summary checkpoint must be a non-negative message ID")
+        if expected_row_exists is None:
+            expected_row_exists = expected_storage_value is not None
+        if type(expected_row_exists) is not bool:
+            raise ValueError("Expected row existence must be a boolean")
+        if expected_storage_value is not None and not isinstance(expected_storage_value, str):
+            raise ValueError("Expected summary state must be text or None")
+        if not expected_row_exists and expected_storage_value is not None:
+            raise ValueError("A missing summary row cannot have a stored value")
+        previous_checkpoint = 0
+        if expected_storage_value is not None:
+            try:
+                previous_envelope = json.loads(expected_storage_value)
+            except (json.JSONDecodeError, TypeError):
+                previous_envelope = None
+            if (
+                isinstance(previous_envelope, dict)
+                and previous_envelope.get("format") == "kuro-session-summary-v1"
+                and type(previous_envelope.get("last_message_id")) is int
+                and previous_envelope["last_message_id"] >= 0
+            ):
+                previous_checkpoint = previous_envelope["last_message_id"]
+        if last_message_id < previous_checkpoint:
+            return False
+
+        envelope = json.dumps(
+            {
+                "format": "kuro-session-summary-v1",
+                "summary": summary,
+                "last_message_id": last_message_id,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        connection = None
+        cursor = None
+        try:
+            connection = self._get_connection()
+            cursor = connection.cursor()
+            table = self._session_summaries_table()
+            if not expected_row_exists:
+                cursor.execute(
+                    f"INSERT INTO {table} (session_id, summary) VALUES (%s, %s)",
+                    (session_id, envelope),
+                )
+            elif expected_storage_value is None:
+                cursor.execute(
+                    f"UPDATE {table} SET summary = %s, "
+                    "updated_at = CURRENT_TIMESTAMP "
+                    "WHERE session_id = %s AND summary IS NULL",
+                    (envelope, session_id),
+                )
+            else:
+                cursor.execute(
+                    f"UPDATE {table} SET summary = %s, "
+                    "updated_at = CURRENT_TIMESTAMP "
+                    "WHERE session_id = %s AND BINARY summary = BINARY %s",
+                    (envelope, session_id, expected_storage_value),
+                )
+            saved = cursor.rowcount == 1
+            connection.commit()
+            return saved
+        except Error as exc:
+            if connection:
+                connection.rollback()
+            if not expected_row_exists and getattr(exc, "errno", None) == 1062:
+                return False
+            logger.error("Error comparing and saving session summary state")
             raise
         finally:
             if cursor:

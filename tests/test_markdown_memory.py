@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -102,6 +103,134 @@ def test_update_writes_new_version_and_rejects_stale_record(store):
     assert store.get_memory("u", original.id).content == "Corrected"
 
 
+def test_expiration_uses_injected_utc_clock_and_exclusive_boundary(tmp_path):
+    now = datetime(2026, 4, 5, 12, 0, tzinfo=timezone.utc)
+    store = MarkdownMemoryStore(tmp_path / "clock-vault", clock=lambda: now)
+    store.initialize_vault()
+    store.initialize_user("u")
+
+    expired = store.create_memory(
+        "u", "preference", "I prefer Python examples", expires=(now - timedelta(seconds=1)).isoformat()
+    )
+    boundary = store.create_memory(
+        "u", "preference", "I prefer Python tutorials", expires=now.isoformat()
+    )
+    eligible = store.create_memory(
+        "u", "preference", "I prefer Python books", expires=(now + timedelta(seconds=1)).isoformat()
+    )
+    no_expiry = store.create_memory("u", "fact", "I use Python daily")
+
+    found = store.search_memories("u", "Python")
+
+    assert {record.id for record in found} == {eligible.id, no_expiry.id}
+    assert {record.id for record in store.list_memories("u", active=True)} == {
+        expired.id, boundary.id, eligible.id, no_expiry.id
+    }
+
+
+def test_malformed_expiry_is_skipped_without_repairing_file(store):
+    record = store.create_memory("u", "fact", "I use Python")
+    path = store.vault_path / "users" / "u" / "facts" / f"{record.id}.md"
+    original = path.read_text(encoding="utf-8")
+    malformed = original.replace("expires: null", "expires: yesterday")
+    path.write_text(malformed, encoding="utf-8")
+
+    assert store.search_memories("u", "Python") == []
+    assert store.diagnostics
+    assert path.read_text(encoding="utf-8") == malformed
+
+
+def test_missing_expiry_metadata_key_is_skipped_safely(store):
+    record = store.create_memory("u", "fact", "I use Python")
+    path = store.vault_path / "users" / "u" / "facts" / f"{record.id}.md"
+    original = path.read_text(encoding="utf-8")
+    malformed = original.replace("expires: null\n", "")
+    path.write_text(malformed, encoding="utf-8")
+
+    assert store.search_memories("u", "Python") == []
+    assert store.diagnostics
+    assert path.read_text(encoding="utf-8") == malformed
+
+
+def test_confirmation_metadata_can_be_set_and_nullable_values_cleared(store):
+    record = store.create_memory(
+        "u",
+        "fact",
+        "I use Python",
+        epistemic_status="inferred",
+        source_session="session-1",
+        expires="2027-01-01T00:00:00Z",
+    )
+
+    confirmed = store.update_memory(
+        record,
+        epistemic_status="confirmed",
+        last_confirmed="2026-04-05T12:00:00Z",
+    )
+    cleared = store.update_memory(
+        confirmed,
+        source_session=None,
+        last_confirmed=None,
+        expires=None,
+    )
+
+    assert confirmed.last_confirmed == "2026-04-05T12:00:00Z"
+    assert confirmed.epistemic_status == "confirmed"
+    assert cleared.source_session is None
+    assert cleared.last_confirmed is None
+    assert cleared.expires is None
+    assert store.get_memory("u", record.id) == cleared
+
+
+def test_confirmation_metadata_updates_keep_version_conflict_and_failed_write_safety(
+    store, monkeypatch
+):
+    record = store.create_memory("u", "fact", "I use Python")
+    confirmed = store.update_memory(record, last_confirmed="2026-04-05T12:00:00Z")
+    with pytest.raises(MemoryConflictError):
+        store.update_memory(record, last_confirmed="2026-04-06T12:00:00Z")
+
+    path = store.vault_path / "users" / "u" / "facts" / f"{record.id}.md"
+    previous = path.read_bytes()
+
+    def fail_replace(*_args, **_kwargs):
+        raise OSError("synthetic replacement failure")
+
+    monkeypatch.setattr(markdown_memory.os, "replace", fail_replace)
+    with pytest.raises(VaultError):
+        store.update_memory(confirmed, last_confirmed="2026-04-07T12:00:00Z")
+
+    assert path.read_bytes() == previous
+    assert store.get_memory("u", record.id) == confirmed
+
+
+@pytest.mark.parametrize("lifecycle_status", ["archived", "superseded"])
+def test_lifecycle_update_persists_and_removes_record_from_retrieval(
+    store, lifecycle_status
+):
+    record = store.create_memory("u", "fact", "Python is my main language")
+
+    updated = store.update_memory(
+        record, status=lifecycle_status, confirmed=True
+    )
+
+    assert updated.status == lifecycle_status
+    assert store.get_memory("u", record.id).status == lifecycle_status
+    assert store.list_memories("u", status=lifecycle_status) == [updated]
+    assert store.search_memories("u", "Python language") == []
+
+
+def test_lifecycle_status_change_requires_explicit_confirmation(store):
+    record = store.create_memory("u", "fact", "I use Python")
+
+    with pytest.raises(PermissionError):
+        store.update_memory(record, status="archived")
+
+    assert store.get_memory("u", record.id) == record
+    archived = store.update_memory(record, status="archived", confirmed=True)
+    assert archived.status == "archived"
+
+
 def test_update_type_moves_memory_to_matching_directory(store):
     record = store.create_memory("u", "fact", "Reclassify me")
     updated = store.update_memory(record, memory_type="experience")
@@ -125,9 +254,16 @@ def test_external_edit_is_detected_before_update(store):
 
 def test_delete_requires_current_version(store):
     record = store.create_memory("u", "fact", "Delete me")
+    with pytest.raises(PermissionError):
+        store.delete_memory("u", record.id, expected_version=record.version)
+    assert store.get_memory("u", record.id) == record
     with pytest.raises(MemoryConflictError):
-        store.delete_memory("u", record.id, expected_version="stale")
-    store.delete_memory("u", record.id, expected_version=record.version)
+        store.delete_memory(
+            "u", record.id, expected_version="stale", confirmed=True
+        )
+    store.delete_memory(
+        "u", record.id, expected_version=record.version, confirmed=True
+    )
     with pytest.raises(MemoryNotFoundError):
         store.get_memory("u", record.id)
     assert store.create_memory("u", "fact", "New item").id != record.id

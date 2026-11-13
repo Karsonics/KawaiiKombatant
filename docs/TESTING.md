@@ -9,6 +9,10 @@ python -m pytest tests/test_markdown_memory.py -q
 ```
 
 They use pytest temporary directories and synthetic content. They do not need MySQL, Ollama, GPU, audio services, Obsidian, or network access. They cover validation, CRUD/filtering, user isolation, malformed files, version conflicts, and simulated atomic-write failures. The suite does not prove cross-process safety or every operating-system permission behavior.
+They also cover UTC expiry cutoff and exact-boundary behavior with an injected
+clock, malformed expiry records, explicit clearing of nullable metadata,
+confirmation timestamps, stale-version rejection, and preservation after a
+simulated failed metadata write.
 
 Memory management and command confirmation use temporary Markdown vaults and fakes:
 
@@ -16,7 +20,9 @@ Memory management and command confirmation use temporary Markdown vaults and fak
 python -m pytest tests/test_memory_management.py -q
 ```
 
-These tests cover status counts, scoped clearing, stable-ID deletion, unavailable stores, failures, and confirmation safeguards.
+These tests cover status counts, scoped clearing, stable-ID deletion,
+confirmation metadata updates, unavailable stores, failures, and confirmation
+safeguards.
 
 Automatic capture uses fake extraction responses and a temporary Markdown vault:
 
@@ -27,6 +33,18 @@ python -m pytest tests/test_markdown_memory_capture.py -q
 These tests cover extraction-model selection, persistence through the storage
 API, exact-quote and confidence checks, sensitive/hypothetical rejection,
 duplicate/conflict skipping, and non-fatal capture failures.
+The same module also exercises the engine boundary: relevant active memories are
+included as reference context, archived or unrelated records are omitted,
+validated extraction is persisted with its session ID, and retrieval/capture
+failures do not block a chat reply or expose underlying storage errors.
+It additionally checks additive preferences, correction/conflict review
+candidates, and that a pending correction leaves the original record unchanged.
+
+Consolidation tests use temporary vaults to verify duplicate, related,
+potential-conflict, and potential-correction classification. They ensure review
+is non-destructive and that pending candidates are reviewable without being
+persisted. These deterministic lexical tests do not establish semantic intent
+understanding.
 
 Startup-boundary tests use only temporary paths and fakes:
 
@@ -41,10 +59,37 @@ MySQL or an LLM service:
 python -m pytest tests/test_session_summaries.py -q
 ```
 
-They cover session isolation and resumption, new-session isolation, summary
-failure handling, preservation of user preferences, and separate summarization
-versus extraction model selection. MySQL table/query behavior remains dependent
-on the configured MySQL service and is not exercised by these fakes.
+They cover session isolation and resumption, new-session isolation, consecutive
+summary checkpoints, older summary context in later cycles, failed summary
+preservation, incomplete transcripts, equal-timestamp ordering, and separate
+summarization versus extraction model selection. Storage tests verify legacy
+plain-text summary compatibility, compare-and-set conflict detection, older
+checkpoint rejection, and concurrent initial creation through fakes; no MySQL
+service is used. Threaded tests exercise same-session serialization, independent
+sessions, and deferral of remaining transcript messages after a simulated
+cross-process conflict.
+
+`tests/test_user_memory_persistence.py` uses connection and cursor fakes to
+verify that connection/write failures keep changes dirty, successful retries
+clear dirty state, and logs omit memory values. An engine test verifies a
+failed legacy-memory flush does not interrupt a chat response. These tests do
+not connect to MySQL or another external service.
+
+`tests/test_reference_context_budget.py` verifies the combined reference-block
+budget, Markdown/summary/legacy priority, truncation markers and determinism,
+invalid-setting fallback, preservation of the character prompt and current user
+turn, unchanged Markdown retrieval settings, and the actual prompt assembled by
+`process_message()`. Delimiter-hardening cases cover Markdown, summary, and
+legacy sources, including nested, case-varied, and whitespace-varied tags. The
+tested limit includes escaped text, wrappers, labels, and separators; tests use
+fake storage and do not access MySQL or a personal vault.
+
+Prompt construction and legacy extraction logging regressions are covered in
+`tests/test_markdown_memory_capture.py`: the configured prompt remains present
+after transcript-window eviction, persisted system rows are excluded, and
+summary/memory data is labeled as untrusted user-role reference context. The
+same tests check that extraction logs contain field names/counts but no user
+values or raw message text.
 
 The API health tests register the production async health handler with the
 route-registration helper and invoke the registered callable using a fake app.

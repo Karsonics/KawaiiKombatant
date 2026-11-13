@@ -31,6 +31,30 @@ context only when that same session is processed, and deleted if the storage
 `clear_session` method is used. Do not treat them as user-level profile memory
 or copy them into diagnostics.
 
+Legacy memory extraction logs report only the number of saved items and the
+extracted field names. They do not include extracted values or the raw user
+message. The dry-run log reports the input character count only. This does not
+change the separate persistence of transcripts or user memory.
+
+Markdown `memory_review` results can contain memory text and candidate text,
+including an unsaved correction candidate kept temporarily in the running
+engine. Treat command responses as personal data and use only through the
+trusted local client. Pending candidates are not persisted and disappear when a
+later capture replaces them or the engine restarts. Review never applies a
+candidate automatically. The `confirm_memory` command records that the user
+explicitly reviewed the selected record; retrieval does not refresh
+`last_confirmed`. This metadata update uses the current record version and
+requires explicit command confirmation.
+Lifecycle status changes through the storage update API require
+`confirmed=True`; do not pass it without explicit user approval. Review
+candidates never perform such changes.
+
+An `expires` timestamp suppresses an active Markdown record from normal search
+at or after its UTC cutoff; expiration does not delete or modify the file.
+Malformed records are skipped rather than treated as current. Expiry is not a
+retention or deletion policy, and the repository does not automatically impose
+type-specific expiration periods.
+
 ## Safe development and testing
 
 - The built-in `python -m server.kuro_api` entry point listens on `127.0.0.1` by default. Its `--host` option accepts IP literals only and rejects `localhost` as well as non-loopback addresses. Non-loopback binding is rejected because the API currently has no authentication or authorization. This limits network exposure but does not authenticate local processes or users.

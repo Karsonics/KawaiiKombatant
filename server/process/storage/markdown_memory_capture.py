@@ -7,24 +7,21 @@ import json
 import re
 import threading
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from server.process.storage.markdown_memory import (
     MarkdownMemoryStore,
     MemoryConflictError,
+    MemoryRecord,
+)
+from server.process.storage.markdown_memory_consolidation import (
+    classify_memory_relationship,
 )
 from utils.logging import logger
 
 
 _ALLOWED_TYPES = {"fact", "preference", "experience"}
-_STOP_WORDS = {
-    "about", "after", "also", "and", "are", "because", "been", "being",
-    "but", "for", "from", "have", "into", "just", "like", "really",
-    "that", "the", "their", "them", "then", "there", "they", "this",
-    "those", "through", "very", "with", "would", "you", "your", "user",
-    "prefer", "prefers", "favorite", "favourite", "enjoy", "enjoys",
-    "love", "loves", "like", "likes", "dislike", "dislikes", "hate",
-}
 _SENSITIVE_PATTERNS = re.compile(
     r"\b(?:"
     r"address|phone(?:\s+number)?|email|e-mail|password|passcode|"
@@ -72,13 +69,6 @@ class MemoryCandidate:
 
 def _normalize(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", text.casefold()))
-
-
-def _tokens(text: str) -> set[str]:
-    return {
-        token for token in re.findall(r"[a-z0-9]+", text.casefold())
-        if len(token) > 2 and token not in _STOP_WORDS
-    }
 
 
 def parse_candidates(raw: str, user_message: str) -> list[MemoryCandidate]:
@@ -169,36 +159,6 @@ def _returned_candidate_count(raw: str) -> int:
     return len(values) if isinstance(values, list) else 0
 
 
-def _possible_conflict(candidate: MemoryCandidate, records: list[Any]) -> bool:
-    candidate_tokens = _tokens(candidate.content)
-    for record in records:
-        if _normalize(candidate.content) == _normalize(record.content):
-            return True
-        if record.type != candidate.type:
-            continue
-        if record.status != "active":
-            continue
-        shared_tags = set(candidate.tags).intersection(record.tags)
-        existing_tokens = _tokens(record.content)
-        shared_tokens = candidate_tokens.intersection(existing_tokens)
-        # Shared topic tags or several shared subject terms make contradictory
-        # values ambiguous. Preserve the current note and skip this candidate.
-        if shared_tags or len(shared_tokens) >= 2:
-            return True
-        if candidate.type == "preference":
-            category = re.search(
-                r"(?:favorite|favourite|preferred|prefer)\s+([a-z0-9_-]+)",
-                candidate.content.casefold(),
-            )
-            existing_category = re.search(
-                r"(?:favorite|favourite|preferred|prefer)\s+([a-z0-9_-]+)",
-                record.content.casefold(),
-            )
-            if category and existing_category and category.group(1) == existing_category.group(1):
-                return True
-    return False
-
-
 class MarkdownMemoryCapture:
     """Extract, validate, de-duplicate, and save memories through the store API."""
 
@@ -252,8 +212,10 @@ class MarkdownMemoryCapture:
         self.model = model
         self.store = store
         self.user_id = user_id
+        self.review_candidates: list[dict] = []
 
     def capture(self, user_message: str, source_session: str | None = None) -> int:
+        self.review_candidates = []
         if not isinstance(user_message, str) or not user_message.strip():
             return 0
         logger.info("Attempting Markdown long-term memory extraction")
@@ -288,8 +250,58 @@ class MarkdownMemoryCapture:
             existing = self.store.list_memories(self.user_id)
             added = 0
             skipped_conflicts = 0
-            for candidate in candidates:
-                if _possible_conflict(candidate, existing):
+            for index, candidate in enumerate(candidates):
+                now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                proposed = MemoryRecord(
+                    id=f"pending-{index}",
+                    user_id=self.user_id,
+                    type=candidate.type,
+                    epistemic_status="confirmed",
+                    status="active",
+                    created=now,
+                    updated=now,
+                    content=candidate.content,
+                    source_session=source_session,
+                    tags=candidate.tags,
+                )
+                reviewed_relationships = []
+                for record in existing:
+                    if record.status != "active":
+                        continue
+                    relationship = classify_memory_relationship(record, proposed)
+                    if relationship and relationship[0] in {
+                        "duplicate",
+                        "potential_conflict",
+                        "potential_correction",
+                    }:
+                        kind, reason = relationship
+                        reviewed_relationships.append(
+                            {
+                                "relationship": kind,
+                                "record_ids": [record.id],
+                                "_record_versions": {record.id: record.version},
+                                "reason": reason,
+                                "potentially_outdated": False,
+                                "records": [
+                                    {
+                                        "id": record.id,
+                                        "type": record.type,
+                                        "status": record.status,
+                                        "content": record.content,
+                                        "tags": list(record.tags),
+                                    }
+                                ],
+                                "candidate": {
+                                    "type": candidate.type,
+                                    "content": candidate.content,
+                                    "tags": list(candidate.tags),
+                                    "source_session": source_session,
+                                    "persisted": False,
+                                },
+                            }
+                        )
+                if reviewed_relationships:
+                    self.review_candidates.extend(reviewed_relationships)
                     skipped_conflicts += 1
                     continue
                 try:
